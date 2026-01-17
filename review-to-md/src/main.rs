@@ -306,10 +306,8 @@ mod tests {
 
     #[test]
     fn test_select_by_index_positive() {
-        let reviews = vec![
-            create_test_review("1", "alice", 5),
-            create_test_review("2", "bob", 3),
-        ];
+        let reviews = [create_test_review("1", "alice", 5),
+            create_test_review("2", "bob", 3)];
         let review_refs: Vec<&Review> = reviews.iter().collect();
 
         let selected = select_review_by_index(&review_refs, 1).unwrap();
@@ -321,10 +319,8 @@ mod tests {
 
     #[test]
     fn test_select_by_index_last() {
-        let reviews = vec![
-            create_test_review("1", "alice", 5),
-            create_test_review("2", "bob", 3),
-        ];
+        let reviews = [create_test_review("1", "alice", 5),
+            create_test_review("2", "bob", 3)];
         let review_refs: Vec<&Review> = reviews.iter().collect();
 
         let selected = select_review_by_index(&review_refs, -1).unwrap();
@@ -333,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_select_out_of_bounds() {
-        let reviews = vec![create_test_review("1", "alice", 5)];
+        let reviews = [create_test_review("1", "alice", 5)];
         let review_refs: Vec<&Review> = reviews.iter().collect();
 
         assert!(select_review_by_index(&review_refs, 0).is_err());
