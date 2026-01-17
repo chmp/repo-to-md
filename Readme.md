@@ -8,7 +8,7 @@ Format GitHub pull request comments as markdown for LLM consumption.
 
 ## Installation
 
-### Prerequisites
+Prerequisites:
 
 - [GitHub CLI (`gh`)](https://cli.github.com/) must be installed and authenticated
 - Rust toolchain for building from source

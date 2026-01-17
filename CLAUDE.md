@@ -52,6 +52,9 @@ cargo test test_name
 cargo clippy
 ```
 
+Always verify code quality with clippy before committing. The code should pass
+with no warnings.
+
 ## Architecture
 
 ### Project Structure

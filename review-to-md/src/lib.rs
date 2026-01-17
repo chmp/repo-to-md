@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -9,23 +12,49 @@ const CONTEXT_LINES: u32 = 5;
 /// Minimum number of lines in a diff hunk before truncation is considered
 const MIN_TRUNCATION_THRESHOLD: usize = 20;
 
+/// A GitHub pull request review comment.
+///
+/// Represents a single comment on a PR, including the file path, line number,
+/// comment text, diff context, and the user who made the comment.
 #[derive(Debug, Deserialize)]
 pub struct Comment {
+    /// The file path relative to the repository root
     pub path: String,
+    /// The line number in the new version of the file (None for general comments)
     pub line: Option<u32>,
+    /// The comment text/content
     pub body: String,
+    /// The unified diff hunk showing the code context
     pub diff_hunk: String,
+    /// The user who made the comment
     pub user: User,
 }
 
+/// A GitHub user.
 #[derive(Debug, Deserialize)]
 pub struct User {
+    /// The user's GitHub login/username
     pub login: String,
 }
 
+/// Retrieves the GitHub owner and repository name from the git remote URL.
+///
+/// Executes `git remote get-url origin` to get the remote URL, then parses it
+/// to extract the owner and repository name.
+///
+/// # Returns
+///
+/// A tuple of `(owner, repo)` on success.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The git command fails to execute
+/// - The git remote is not configured
+/// - The remote URL is not a valid GitHub URL
 pub fn get_repo_info() -> Result<(String, String)> {
     let output = Command::new("git")
-        .args(&["remote", "get-url", "origin"])
+        .args(["remote", "get-url", "origin"])
         .output()
         .context("Failed to execute git command")?;
 
@@ -41,6 +70,23 @@ pub fn get_repo_info() -> Result<(String, String)> {
     parse_github_url(&url)
 }
 
+/// Parses a GitHub URL to extract the owner and repository name.
+///
+/// Supports both SSH and HTTPS GitHub URLs:
+/// - SSH: `git@github.com:owner/repo.git`
+/// - HTTPS: `https://github.com/owner/repo.git`
+///
+/// # Arguments
+///
+/// * `url` - The GitHub URL to parse
+///
+/// # Returns
+///
+/// A tuple of `(owner, repo)` on success.
+///
+/// # Errors
+///
+/// Returns an error if the URL is not a valid GitHub URL format.
 pub fn parse_github_url(url: &str) -> Result<(String, String)> {
     if let Some(ssh_match) = url.strip_prefix("git@github.com:") {
         let parts: Vec<&str> = ssh_match.trim_end_matches(".git").split('/').collect();
@@ -88,13 +134,38 @@ fn validate_github_repo(repo: &str) -> Result<()> {
         anyhow::bail!("GitHub repository name cannot start with a dot");
     }
 
-    if !repo.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+    if !repo
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
         anyhow::bail!("GitHub repository name can only contain alphanumeric characters, hyphens, underscores, and dots");
     }
 
     Ok(())
 }
 
+/// Fetches pull request review comments from GitHub using the `gh` CLI.
+///
+/// Executes `gh api` to retrieve all review comments for the specified pull request.
+/// The owner and repository name are validated before making the API call.
+///
+/// # Arguments
+///
+/// * `owner` - The GitHub repository owner (must be 1-39 alphanumeric characters or hyphens)
+/// * `repo` - The repository name (must be 1-100 characters)
+/// * `pr_id` - The pull request number
+///
+/// # Returns
+///
+/// A vector of [`Comment`] structs representing all review comments on the PR.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The owner or repo names are invalid
+/// - The `gh` CLI is not installed or fails to execute
+/// - The API request fails (e.g., PR not found, authentication issues)
+/// - The response contains invalid JSON or UTF-8
 pub fn fetch_pr_comments(owner: &str, repo: &str, pr_id: u32) -> Result<Vec<Comment>> {
     validate_github_owner(owner)?;
     validate_github_repo(repo)?;
@@ -102,7 +173,7 @@ pub fn fetch_pr_comments(owner: &str, repo: &str, pr_id: u32) -> Result<Vec<Comm
     let api_path = format!("/repos/{}/{}/pulls/{}/comments", owner, repo, pr_id);
 
     let output = Command::new("gh")
-        .args(&[
+        .args([
             "api",
             "-H",
             "Accept: application/vnd.github+json",
@@ -122,26 +193,86 @@ pub fn fetch_pr_comments(owner: &str, repo: &str, pr_id: u32) -> Result<Vec<Comm
     parse_comments_json(&json)
 }
 
+/// Parses a JSON string containing GitHub PR review comments.
+///
+/// Deserializes the JSON response from the GitHub API into a vector of [`Comment`] structs.
+///
+/// # Arguments
+///
+/// * `json` - A JSON string in the format returned by the GitHub PR comments API
+///
+/// # Returns
+///
+/// A vector of [`Comment`] structs.
+///
+/// # Errors
+///
+/// Returns an error if the JSON is invalid or doesn't match the expected schema.
 pub fn parse_comments_json(json: &str) -> Result<Vec<Comment>> {
-    let comments: Vec<Comment> = serde_json::from_str(json)
-        .context("Failed to parse JSON response from GitHub API")?;
+    let comments: Vec<Comment> =
+        serde_json::from_str(json).context("Failed to parse JSON response from GitHub API")?;
     Ok(comments)
 }
 
+/// Reads and parses PR review comments from a JSON file.
+///
+/// Useful for testing or offline processing. The file should contain JSON in the
+/// format returned by the GitHub PR comments API.
+///
+/// # Arguments
+///
+/// * `file_path` - Path to the JSON file
+///
+/// # Returns
+///
+/// A vector of [`Comment`] structs.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The file cannot be read
+/// - The file contains invalid JSON or doesn't match the expected schema
 pub fn read_comments_from_file(file_path: &str) -> Result<Vec<Comment>> {
     let json = std::fs::read_to_string(file_path)
         .context(format!("Failed to read JSON file: {}", file_path))?;
     parse_comments_json(&json)
 }
 
+/// Groups comments by their file path.
+///
+/// Takes a vector of comments and organizes them into a HashMap where the key
+/// is the file path and the value is a vector of all comments for that file.
+///
+/// # Arguments
+///
+/// * `comments` - A vector of [`Comment`] structs to group
+///
+/// # Returns
+///
+/// A HashMap mapping file paths to vectors of comments for that file.
 pub fn group_comments_by_file(comments: Vec<Comment>) -> HashMap<String, Vec<Comment>> {
     let mut grouped: HashMap<String, Vec<Comment>> = HashMap::new();
     for comment in comments {
-        grouped.entry(comment.path.clone()).or_default().push(comment);
+        grouped
+            .entry(comment.path.clone())
+            .or_default()
+            .push(comment);
     }
     grouped
 }
 
+/// Detects the programming language from a file path.
+///
+/// Maps file extensions to markdown language identifiers for syntax highlighting.
+///
+/// # Arguments
+///
+/// * `path` - The file path
+///
+/// # Returns
+///
+/// A language identifier string (e.g., "rust", "python", "javascript") or an
+/// empty string if the language cannot be determined.
 pub fn detect_language(path: &str) -> &str {
     if let Some(ext) = path.rsplit('.').next() {
         match ext {
@@ -170,6 +301,17 @@ pub fn detect_language(path: &str) -> &str {
     }
 }
 
+/// Returns the comment prefix for a given programming language.
+///
+/// Used to embed review comments as inline code comments in the markdown output.
+///
+/// # Arguments
+///
+/// * `language` - The language identifier (from [`detect_language`])
+///
+/// # Returns
+///
+/// The comment prefix string (e.g., "//" for most languages, "#" for Python/Bash, "<!--" for HTML)
 pub fn get_comment_prefix(language: &str) -> &str {
     match language {
         "python" | "bash" | "ruby" | "yaml" | "toml" => "#",
@@ -178,6 +320,18 @@ pub fn get_comment_prefix(language: &str) -> &str {
     }
 }
 
+/// Returns the comment suffix for a given programming language.
+///
+/// Most languages don't require a suffix (just a prefix), but some like HTML need
+/// a closing delimiter.
+///
+/// # Arguments
+///
+/// * `language` - The language identifier (from [`detect_language`])
+///
+/// # Returns
+///
+/// The comment suffix string (" -->" for HTML/Markdown, empty string for most languages)
 pub fn get_comment_suffix(language: &str) -> &str {
     match language {
         "html" | "markdown" => " -->",
@@ -208,7 +362,7 @@ fn parse_diff_hunk_with_line_numbers(
             // We need the number after the '+' sign
             if let Some(plus_pos) = first_line.find('+') {
                 let after_plus = &first_line[plus_pos + 1..];
-                if let Some(comma_or_space) = after_plus.find(|c: char| c == ',' || c == ' ') {
+                if let Some(comma_or_space) = after_plus.find([',', ' ']) {
                     if let Ok(line_num) = after_plus[..comma_or_space].parse::<u32>() {
                         current_new_line = Some(line_num);
                     }
@@ -247,7 +401,11 @@ fn parse_diff_hunk_with_line_numbers(
         if let Some('+') = line.chars().next() {
             // Added line
             if !line.starts_with("+++") {
-                let content = if line.len() > 1 { line[1..].to_string() } else { String::new() };
+                let content = if line.len() > 1 {
+                    line[1..].to_string()
+                } else {
+                    String::new()
+                };
                 if should_include {
                     diff_lines.push(DiffLine {
                         content,
@@ -261,7 +419,11 @@ fn parse_diff_hunk_with_line_numbers(
         } else if let Some('-') = line.chars().next() {
             // Deleted line - include in output but no line number
             if !line.starts_with("---") {
-                let content = if line.len() > 1 { line[1..].to_string() } else { String::new() };
+                let content = if line.len() > 1 {
+                    line[1..].to_string()
+                } else {
+                    String::new()
+                };
                 if should_include {
                     diff_lines.push(DiffLine {
                         content,
@@ -293,7 +455,10 @@ fn parse_diff_hunk_with_line_numbers(
 }
 
 fn output_comment(output: &mut String, comment: &Comment, prefix: &str, suffix: &str) {
-    output.push_str(&format!("{} <review user=\"{}\">\n", prefix, comment.user.login));
+    output.push_str(&format!(
+        "{} <review user=\"{}\">\n",
+        prefix, comment.user.login
+    ));
 
     // Handle multi-line comments: each line gets the prefix
     for line in comment.body.lines() {
@@ -308,10 +473,7 @@ fn output_comment(output: &mut String, comment: &Comment, prefix: &str, suffix: 
 }
 
 /// Calculate the line range to display based on commented lines
-fn calculate_context_range(
-    commented_lines: &[u32],
-    total_lines: usize,
-) -> Option<(u32, u32)> {
+fn calculate_context_range(commented_lines: &[u32], total_lines: usize) -> Option<(u32, u32)> {
     if commented_lines.is_empty() || total_lines <= MIN_TRUNCATION_THRESHOLD {
         return None; // Show full hunk
     }
@@ -330,6 +492,27 @@ fn calculate_context_range(
     Some((start, end))
 }
 
+/// Formats grouped PR review comments as markdown with inline code blocks.
+///
+/// This is the core formatting engine that generates markdown output designed for
+/// LLM consumption. For each file:
+/// - Groups comments by their diff hunk
+/// - Parses diff hunks to extract line numbers
+/// - Applies intelligent truncation for large diffs (shows context around commented lines)
+/// - Generates markdown code blocks with language-specific syntax highlighting
+/// - Embeds comments as inline code comments using `<review user="...">` XML tags
+///
+/// Comments are embedded at the appropriate line numbers within the code. Comments
+/// without line numbers appear at the top of the code block. Large diffs are
+/// truncated to show only 5 lines of context before/after commented lines.
+///
+/// # Arguments
+///
+/// * `grouped_comments` - Comments grouped by file path (from [`group_comments_by_file`])
+///
+/// # Returns
+///
+/// A formatted markdown string with headings, code blocks, and inline comments.
 pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment>>) -> String {
     let mut output = String::new();
 
@@ -349,13 +532,15 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
         // Group comments by their diff_hunk to avoid processing same hunk multiple times
         let mut hunks: HashMap<String, Vec<&Comment>> = HashMap::new();
         for comment in comments {
-            hunks.entry(comment.diff_hunk.clone()).or_default().push(comment);
+            hunks
+                .entry(comment.diff_hunk.clone())
+                .or_default()
+                .push(comment);
         }
 
         let mut hunk_list: Vec<_> = hunks.iter().collect();
-        hunk_list.sort_by_key(|(_, comments)| {
-            comments.iter().filter_map(|c| c.line).min().unwrap_or(0)
-        });
+        hunk_list
+            .sort_by_key(|(_, comments)| comments.iter().filter_map(|c| c.line).min().unwrap_or(0));
 
         for (diff_hunk, hunk_comments) in hunk_list {
             // Separate comments with and without line numbers
@@ -394,7 +579,10 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
                 if min_line == max_line {
                     output.push_str(&format!("## `{}` - Line {}\n\n", file_path, min_line));
                 } else {
-                    output.push_str(&format!("## `{}` - Lines {}-{}\n\n", file_path, min_line, max_line));
+                    output.push_str(&format!(
+                        "## `{}` - Lines {}-{}\n\n",
+                        file_path, min_line, max_line
+                    ));
                 }
             }
 
@@ -441,6 +629,19 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
     output
 }
 
+/// Extracts code lines from a unified diff hunk.
+///
+/// Processes a diff hunk to extract only the code lines, excluding diff metadata
+/// and deleted lines. Added lines (starting with '+') have the '+' prefix removed.
+/// Context lines are included as-is.
+///
+/// # Arguments
+///
+/// * `diff_hunk` - A unified diff hunk string (starting with "@@")
+///
+/// # Returns
+///
+/// A vector of code line strings with diff markers removed.
 pub fn extract_code_from_diff_hunk(diff_hunk: &str) -> Vec<String> {
     let mut code_lines = Vec::new();
 
@@ -460,6 +661,3 @@ pub fn extract_code_from_diff_hunk(diff_hunk: &str) -> Vec<String> {
 
     code_lines
 }
-
-#[cfg(test)]
-mod tests;
