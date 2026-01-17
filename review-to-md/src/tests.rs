@@ -132,9 +132,15 @@ mod diff_parsing {
 
         let result = extract_code_from_diff_hunk(diff_hunk);
 
-        assert!(result.iter().any(|l| l.contains("pub output: Option<PathBuf>")));
-        assert!(result.iter().any(|l| l.contains("HTML sanitization configuration")));
-        assert!(result.iter().any(|l| l.contains("pub sanitizer: SanitizerConfig")));
+        assert!(result
+            .iter()
+            .any(|l| l.contains("pub output: Option<PathBuf>")));
+        assert!(result
+            .iter()
+            .any(|l| l.contains("HTML sanitization configuration")));
+        assert!(result
+            .iter()
+            .any(|l| l.contains("pub sanitizer: SanitizerConfig")));
     }
 }
 
@@ -145,7 +151,13 @@ mod integration {
         let comments = parse_comments_json(json).expect("Failed to parse JSON");
         let grouped = group_comments_by_file(comments);
         let output = format_comments_as_markdown(grouped);
-        assert_eq!(output.trim(), expected.trim(), "Output mismatch:\n\nGot:\n{}\n\nExpected:\n{}", output, expected);
+        assert_eq!(
+            output.trim(),
+            expected.trim(),
+            "Output mismatch:\n\nGot:\n{}\n\nExpected:\n{}",
+            output,
+            expected
+        );
     }
 
     #[test]
