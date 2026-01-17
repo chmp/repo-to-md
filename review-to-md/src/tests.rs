@@ -26,7 +26,7 @@ mod url_parsing {
 }
 
 mod language_detection {
-    use super::*;
+    use crate::language::detect_language;
 
     #[test]
     fn test_detect_language() {
@@ -39,7 +39,7 @@ mod language_detection {
 }
 
 mod comment_syntax {
-    use super::*;
+    use crate::language::{get_comment_prefix, get_comment_suffix};
 
     #[test]
     fn test_comment_syntax() {
@@ -119,7 +119,7 @@ mod validation {
 }
 
 mod diff_parsing {
-    use super::*;
+    use crate::diff::extract_code_from_diff_hunk;
 
     #[test]
     fn test_extract_code_from_diff_hunk() {
