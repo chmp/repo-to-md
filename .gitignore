@@ -2,3 +2,10 @@ tmp*
 
 /target/
 /.claude/
+
+# Exploration and temporary files
+explore_*.py
+explore_*.md
+tmp/
+*_output.md
+tmpclaude-*
