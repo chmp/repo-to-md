@@ -59,7 +59,46 @@ pub fn parse_github_url(url: &str) -> Result<(String, String)> {
     anyhow::bail!("Could not parse GitHub URL: {}", url)
 }
 
+fn validate_github_owner(owner: &str) -> Result<()> {
+    if owner.is_empty() || owner.len() > 39 {
+        anyhow::bail!("GitHub owner must be 1-39 characters");
+    }
+
+    if owner.starts_with('-') || owner.ends_with('-') {
+        anyhow::bail!("GitHub owner cannot start or end with a hyphen");
+    }
+
+    if owner.contains("--") {
+        anyhow::bail!("GitHub owner cannot contain consecutive hyphens");
+    }
+
+    if !owner.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        anyhow::bail!("GitHub owner can only contain alphanumeric characters and hyphens");
+    }
+
+    Ok(())
+}
+
+fn validate_github_repo(repo: &str) -> Result<()> {
+    if repo.is_empty() || repo.len() > 100 {
+        anyhow::bail!("GitHub repository name must be 1-100 characters");
+    }
+
+    if repo.starts_with('.') {
+        anyhow::bail!("GitHub repository name cannot start with a dot");
+    }
+
+    if !repo.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        anyhow::bail!("GitHub repository name can only contain alphanumeric characters, hyphens, underscores, and dots");
+    }
+
+    Ok(())
+}
+
 pub fn fetch_pr_comments(owner: &str, repo: &str, pr_id: u32) -> Result<Vec<Comment>> {
+    validate_github_owner(owner)?;
+    validate_github_repo(repo)?;
+
     let api_path = format!("/repos/{}/{}/pulls/{}/comments", owner, repo, pr_id);
 
     let output = Command::new("gh")
@@ -423,99 +462,4 @@ pub fn extract_code_from_diff_hunk(diff_hunk: &str) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_github_url_ssh() {
-        let url = "git@github.com:chmp/markdown-app.git";
-        let result = parse_github_url(url).unwrap();
-        assert_eq!(result, ("chmp".to_string(), "markdown-app".to_string()));
-    }
-
-    #[test]
-    fn test_parse_github_url_https() {
-        let url = "https://github.com/chmp/markdown-app.git";
-        let result = parse_github_url(url).unwrap();
-        assert_eq!(result, ("chmp".to_string(), "markdown-app".to_string()));
-    }
-
-    #[test]
-    fn test_parse_github_url_https_no_git() {
-        let url = "https://github.com/chmp/markdown-app";
-        let result = parse_github_url(url).unwrap();
-        assert_eq!(result, ("chmp".to_string(), "markdown-app".to_string()));
-    }
-
-    #[test]
-    fn test_detect_language() {
-        assert_eq!(detect_language("file.rs"), "rust");
-        assert_eq!(detect_language("file.py"), "python");
-        assert_eq!(detect_language("file.md"), "markdown");
-        assert_eq!(detect_language("path/to/file.js"), "javascript");
-        assert_eq!(detect_language("unknown.xyz"), "");
-    }
-
-    #[test]
-    fn test_comment_syntax() {
-        assert_eq!(get_comment_prefix("rust"), "//");
-        assert_eq!(get_comment_prefix("python"), "#");
-        assert_eq!(get_comment_prefix("markdown"), "<!--");
-
-        assert_eq!(get_comment_suffix("rust"), "");
-        assert_eq!(get_comment_suffix("python"), "");
-        assert_eq!(get_comment_suffix("markdown"), " -->");
-    }
-
-    #[test]
-    fn test_extract_code_from_diff_hunk() {
-        let diff_hunk = r#"@@ -55,6 +59,8 @@ pub struct BuildConfig {
-     pub output: Option<PathBuf>,
-     pub document_store: ObjectStore,
-     pub object_stores: BTreeMap<String, ObjectStore>,
-+    /// HTML sanitization configuration
-+    pub sanitizer: SanitizerConfig,"#;
-
-        let result = extract_code_from_diff_hunk(diff_hunk);
-
-        assert!(result.iter().any(|l| l.contains("pub output: Option<PathBuf>")));
-        assert!(result.iter().any(|l| l.contains("HTML sanitization configuration")));
-        assert!(result.iter().any(|l| l.contains("pub sanitizer: SanitizerConfig")));
-    }
-
-    // Integration tests with examples
-    fn test_formatting(json: &str, expected: &str) {
-        let comments = parse_comments_json(json).expect("Failed to parse JSON");
-        let grouped = group_comments_by_file(comments);
-        let output = format_comments_as_markdown(grouped);
-        assert_eq!(output.trim(), expected.trim(), "Output mismatch:\n\nGot:\n{}\n\nExpected:\n{}", output, expected);
-    }
-
-    #[test]
-    fn test_example_simple_comment() {
-        let json = include_str!("../../examples/simple_comment.json");
-        let expected = include_str!("../../examples/simple_comment.expected.md");
-        test_formatting(json, expected);
-    }
-
-    #[test]
-    fn test_example_multiple_comments() {
-        let json = include_str!("../../examples/multiple_comments.json");
-        let expected = include_str!("../../examples/multiple_comments.expected.md");
-        test_formatting(json, expected);
-    }
-
-    #[test]
-    fn test_example_multiline_comment() {
-        let json = include_str!("../../examples/multiline_comment.json");
-        let expected = include_str!("../../examples/multiline_comment.expected.md");
-        test_formatting(json, expected);
-    }
-
-    #[test]
-    fn test_example_no_line_number() {
-        let json = include_str!("../../examples/no_line_number.json");
-        let expected = include_str!("../../examples/no_line_number.expected.md");
-        test_formatting(json, expected);
-    }
-}
+mod tests;

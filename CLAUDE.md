@@ -124,3 +124,14 @@ diffs show `...` at start/end.
 Tests use example JSON files in `examples/` with corresponding `.expected.md`
 files. The `test_formatting()` helper compares actual output against expected
 output.
+
+## Documentation Style Guidelines
+
+### Heading capitalization
+- Use sentence case for all headings (capitalize only the first word and proper nouns)
+- Examples:
+  - ✓ "Output format"
+  - ✗ "Output Format"
+  - ✓ "How it works"
+  - ✗ "How It Works"
+- Exception: Proper nouns and acronyms remain capitalized (e.g., "GitHub API usage")
