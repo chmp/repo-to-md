@@ -87,7 +87,7 @@ pub fn get_repo_info() -> Result<(String, String)> {
 /// # Errors
 ///
 /// Returns an error if the URL is not a valid GitHub URL format.
-pub fn parse_github_url(url: &str) -> Result<(String, String)> {
+pub(crate) fn parse_github_url(url: &str) -> Result<(String, String)> {
     if let Some(ssh_match) = url.strip_prefix("git@github.com:") {
         let parts: Vec<&str> = ssh_match.trim_end_matches(".git").split('/').collect();
         if parts.len() == 2 {
@@ -208,7 +208,7 @@ pub fn fetch_pr_comments(owner: &str, repo: &str, pr_id: u32) -> Result<Vec<Comm
 /// # Errors
 ///
 /// Returns an error if the JSON is invalid or doesn't match the expected schema.
-pub fn parse_comments_json(json: &str) -> Result<Vec<Comment>> {
+pub(crate) fn parse_comments_json(json: &str) -> Result<Vec<Comment>> {
     let comments: Vec<Comment> =
         serde_json::from_str(json).context("Failed to parse JSON response from GitHub API")?;
     Ok(comments)
@@ -273,7 +273,7 @@ pub fn group_comments_by_file(comments: Vec<Comment>) -> HashMap<String, Vec<Com
 ///
 /// A language identifier string (e.g., "rust", "python", "javascript") or an
 /// empty string if the language cannot be determined.
-pub fn detect_language(path: &str) -> &str {
+pub(crate) fn detect_language(path: &str) -> &str {
     if let Some(ext) = path.rsplit('.').next() {
         match ext {
             "rs" => "rust",
@@ -312,7 +312,7 @@ pub fn detect_language(path: &str) -> &str {
 /// # Returns
 ///
 /// The comment prefix string (e.g., "//" for most languages, "#" for Python/Bash, "<!--" for HTML)
-pub fn get_comment_prefix(language: &str) -> &str {
+pub(crate) fn get_comment_prefix(language: &str) -> &str {
     match language {
         "python" | "bash" | "ruby" | "yaml" | "toml" => "#",
         "html" | "markdown" => "<!--",
@@ -332,7 +332,7 @@ pub fn get_comment_prefix(language: &str) -> &str {
 /// # Returns
 ///
 /// The comment suffix string (" -->" for HTML/Markdown, empty string for most languages)
-pub fn get_comment_suffix(language: &str) -> &str {
+pub(crate) fn get_comment_suffix(language: &str) -> &str {
     match language {
         "html" | "markdown" => " -->",
         _ => "",
@@ -642,7 +642,8 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
 /// # Returns
 ///
 /// A vector of code line strings with diff markers removed.
-pub fn extract_code_from_diff_hunk(diff_hunk: &str) -> Vec<String> {
+#[cfg(test)]
+pub(crate) fn extract_code_from_diff_hunk(diff_hunk: &str) -> Vec<String> {
     let mut code_lines = Vec::new();
 
     for line in diff_hunk.lines() {
