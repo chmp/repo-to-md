@@ -33,7 +33,8 @@ fn main() -> Result<()> {
         let (owner, repo) = if let (Some(owner), Some(repo)) = (cli.owner, cli.repo) {
             (owner, repo)
         } else {
-            get_repo_info().context("Failed to auto-detect repository. Please provide --owner and --repo")?
+            get_repo_info()
+                .context("Failed to auto-detect repository. Please provide --owner and --repo")?
         };
         fetch_pr_comments(&owner, &repo, pr_id)?
     } else {
