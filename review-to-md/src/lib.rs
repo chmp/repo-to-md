@@ -483,53 +483,6 @@ mod tests {
         assert!(result.iter().any(|l| l.contains("pub sanitizer: SanitizerConfig")));
     }
 
-    #[test]
-    fn test_parse_comments_json_with_sample_data() {
-        let json = std::fs::read_to_string("../tmp_review.json")
-            .or_else(|_| std::fs::read_to_string("tmp_review.json"))
-            .expect("Failed to read tmp_review.json - make sure it exists");
-
-        let comments = parse_comments_json(&json).expect("Failed to parse JSON");
-
-        assert!(!comments.is_empty(), "Expected at least one comment");
-
-        let first_comment = &comments[0];
-        assert!(!first_comment.path.is_empty());
-        assert!(!first_comment.body.is_empty());
-        assert!(!first_comment.diff_hunk.is_empty());
-        assert!(!first_comment.user.login.is_empty());
-    }
-
-    #[test]
-    fn test_format_comments_as_markdown() {
-        let json = std::fs::read_to_string("../tmp_review.json")
-            .or_else(|_| std::fs::read_to_string("tmp_review.json"))
-            .expect("Failed to read tmp_review.json");
-
-        let comments = parse_comments_json(&json).expect("Failed to parse JSON");
-        let grouped = group_comments_by_file(comments);
-        let markdown = format_comments_as_markdown(grouped);
-
-        assert!(markdown.contains("##"));
-        assert!(markdown.contains("```"));
-        assert!(markdown.contains("<review user="));
-        assert!(markdown.contains("</review>"));
-    }
-
-    #[test]
-    #[ignore]
-    fn test_show_formatted_output() {
-        let json = std::fs::read_to_string("../tmp_review.json")
-            .or_else(|_| std::fs::read_to_string("tmp_review.json"))
-            .expect("Failed to read tmp_review.json");
-
-        let comments = parse_comments_json(&json).expect("Failed to parse JSON");
-        let grouped = group_comments_by_file(comments);
-        let markdown = format_comments_as_markdown(grouped);
-
-        println!("\n{}", markdown);
-    }
-
     // Integration tests with examples
     fn test_formatting(json: &str, expected: &str) {
         let comments = parse_comments_json(json).expect("Failed to parse JSON");
