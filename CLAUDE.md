@@ -11,6 +11,18 @@ output is designed for consumption by LLMs when addressing PR feedback.
 
 ## Development workflow
 
+### Before finalizing work
+
+**IMPORTANT**: Always run these commands before finalizing any work:
+
+```bash
+cargo fmt      # Format code
+cargo clippy   # Lint for issues
+cargo test     # Run test suite
+```
+
+All three must pass with no warnings or errors. This is mandatory before committing or submitting work.
+
 ### Format
 
 ```bash
