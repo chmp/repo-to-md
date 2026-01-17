@@ -9,24 +9,37 @@ code in this repository.
 `gh` CLI and formats them as markdown code blocks with inline comments. The
 output is designed for consumption by LLMs when addressing PR feedback.
 
-## Commands
+## Development workflow
 
-### Build
-
-```bash
-cargo build --release
-```
-
-Binary location: `target/release/review-to-md` (or `review-to-md.exe` on
-Windows)
-
-### Run
+### Format
 
 ```bash
-cargo run -- <PR_NUMBER>
-cargo run -- <PR_NUMBER> --owner <OWNER> --repo <REPO>
-cargo run -- --json-file examples/simple_comment.json
+cargo fmt
 ```
+
+Format all code in the workspace:
+
+```bash
+cargo fmt --all
+```
+
+Check formatting without modifying files (useful for CI):
+
+```bash
+cargo fmt --all -- --check
+```
+
+Always format code before committing. The CI workflow will fail if code is not
+properly formatted.
+
+### Lint
+
+```bash
+cargo clippy
+```
+
+Always verify code quality with clippy before committing. The code should pass
+with no warnings.
 
 ### Test
 
@@ -46,14 +59,22 @@ Run a specific test:
 cargo test test_name
 ```
 
-### Lint
+### Build
 
 ```bash
-cargo clippy
+cargo build --release
 ```
 
-Always verify code quality with clippy before committing. The code should pass
-with no warnings.
+Binary location: `target/release/review-to-md` (or `review-to-md.exe` on
+Windows)
+
+### Run
+
+```bash
+cargo run -- <PR_NUMBER>
+cargo run -- <PR_NUMBER> --owner <OWNER> --repo <REPO>
+cargo run -- --json-file examples/simple_comment.json
+```
 
 ## Architecture
 
