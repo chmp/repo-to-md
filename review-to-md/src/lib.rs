@@ -8,7 +8,7 @@ mod formatting;
 mod language;
 
 // Re-export public API
-pub use client::{fetch_review_comments, list_reviews, Review};
+pub use client::{fetch_review_comments, list_reviews, CommentCount, Review, ReviewAuthor};
 pub use formatting::format_comments_as_markdown;
 
 use anyhow::{Context, Result};

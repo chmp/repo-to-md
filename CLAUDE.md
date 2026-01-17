@@ -81,6 +81,15 @@ Fetch comments from a specific review (skip interactive selection):
 
 ```bash
 cargo run -- <PR_NUMBER> --review-id <REVIEW_ID>
+cargo run -- <PR_NUMBER> --review-index 1
+cargo run -- <PR_NUMBER> --review-index -1
+```
+
+Filter reviews by author:
+
+```bash
+cargo run -- <PR_NUMBER> --author <USERNAME>
+cargo run -- <PR_NUMBER> --author <USERNAME> --review-index -1
 ```
 
 Read from JSON file:
@@ -88,6 +97,14 @@ Read from JSON file:
 ```bash
 cargo run -- --json-file examples/simple_comment.json
 ```
+
+### Temporary files and exploration scripts
+
+Temporary files and exploration scripts should be placed in:
+- `target/tmp/` - For build-related temporary files
+- `tmp/` - For manual exploration scripts and outputs
+
+Do not commit exploration scripts or their output files. Add them to `.gitignore` if needed.
 
 ## Architecture
 
@@ -142,6 +159,9 @@ examples/            - Test fixtures with JSON inputs and expected markdown outp
 - GraphQL queries via `gh api graphql` command
 - Returns `Review` and `Comment` structs
 - Includes `isMinimized` field (fetched but not used yet)
+- **Security**: GraphQL queries use parameterized variables (passed via `gh -F` flags),
+  not string interpolation. The `gh` CLI handles escaping and injection prevention.
+  Variables are never interpolated directly into the query string.
 
 **Formatting engine (formatting.rs):**
 
@@ -206,6 +226,51 @@ cargo test
 - `tests::comment_syntax` - Comment prefix/suffix for different languages
 - `tests::diff_parsing` - Diff hunk parsing and code extraction
 - `tests::integration` - End-to-end formatting tests with example files
+
+## Code organization guidelines
+
+### Module structure
+
+Organize code in this order:
+
+1. **Public types** - Exported structs and enums
+2. **Internal types** - Private implementation details
+3. **Public functions** (each followed by their specific support functions)
+4. **General support functions** - Helpers used by multiple public functions
+
+**Example from client.rs**:
+```rust
+// 1. Public types
+pub struct Review { ... }
+pub struct ReviewAuthor { ... }
+
+// 2. Internal types
+struct GraphQLResponse<T> { ... }
+struct ListReviewsData { ... }
+
+// 3. Public functions
+pub fn list_reviews(...) { ... }
+pub fn fetch_review_comments(...) { ... }
+
+// 4. General support functions
+fn run_graphql_query(...) { ... }
+```
+
+### Function ordering in main.rs
+
+1. Imports
+2. Argument structs (Cli with argh derives)
+3. Main function
+4. Support functions (in logical order)
+
+### Public interface changes
+
+When modifying the public CLI interface (adding/removing/changing flags):
+
+1. Update Readme.md with user-facing documentation
+2. Update CLAUDE.md with developer-facing details
+3. Update help text in argh derive attributes
+4. Add tests if the change affects behavior
 
 ## Documentation Style Guidelines
 

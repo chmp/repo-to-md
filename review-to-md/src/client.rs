@@ -102,51 +102,6 @@ struct GraphQLAuthor {
     login: String,
 }
 
-/// Executes a GraphQL query using the `gh` CLI.
-///
-/// # Arguments
-///
-/// * `query` - The GraphQL query string
-/// * `variables` - A vector of (name, value) pairs for query variables
-///
-/// # Returns
-///
-/// The raw JSON response as a string
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The `gh` CLI is not installed or fails to execute
-/// - The API request fails
-/// - The response contains invalid UTF-8
-fn run_graphql_query(query: &str, variables: &[(&str, &str)]) -> Result<String> {
-    let query_arg = format!("query={}", query);
-    let mut args = vec!["api", "graphql", "-f", &query_arg];
-
-    // Add variables as -F flags
-    let var_args: Vec<String> = variables
-        .iter()
-        .map(|(name, value)| format!("{}={}", name, value))
-        .collect();
-
-    for var_arg in &var_args {
-        args.push("-F");
-        args.push(var_arg);
-    }
-
-    let output = Command::new("gh")
-        .args(&args)
-        .output()
-        .context("Failed to execute gh command. Is the gh CLI installed?")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("gh GraphQL command failed: {}", stderr);
-    }
-
-    String::from_utf8(output.stdout).context("Invalid UTF-8 in gh output")
-}
-
 /// Lists all reviews for a pull request.
 ///
 /// Fetches review metadata including ID, author, state, body, and comment count.
@@ -269,4 +224,49 @@ pub fn fetch_review_comments(review_id: &str) -> Result<Vec<Comment>> {
         .collect();
 
     Ok(comments)
+}
+
+/// Executes a GraphQL query using the `gh` CLI.
+///
+/// # Arguments
+///
+/// * `query` - The GraphQL query string
+/// * `variables` - A vector of (name, value) pairs for query variables
+///
+/// # Returns
+///
+/// The raw JSON response as a string
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The `gh` CLI is not installed or fails to execute
+/// - The API request fails
+/// - The response contains invalid UTF-8
+fn run_graphql_query(query: &str, variables: &[(&str, &str)]) -> Result<String> {
+    let query_arg = format!("query={}", query);
+    let mut args = vec!["api", "graphql", "-f", &query_arg];
+
+    // Add variables as -F flags
+    let var_args: Vec<String> = variables
+        .iter()
+        .map(|(name, value)| format!("{}={}", name, value))
+        .collect();
+
+    for var_arg in &var_args {
+        args.push("-F");
+        args.push(var_arg);
+    }
+
+    let output = Command::new("gh")
+        .args(&args)
+        .output()
+        .context("Failed to execute gh command. Is the gh CLI installed?")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("gh GraphQL command failed: {}", stderr);
+    }
+
+    String::from_utf8(output.stdout).context("Invalid UTF-8 in gh output")
 }
