@@ -1,0 +1,9 @@
+[
+  {
+    "path": "src/main.rs",
+    "line": null,
+    "body": "This entire section needs refactoring",
+    "diff_hunk": "@@ -10,8 +10,10 @@\n fn main() {\n     setup();\n+    run();\n     cleanup();\n }\n",
+    "user": {"login": "reviewer"}
+  }
+]

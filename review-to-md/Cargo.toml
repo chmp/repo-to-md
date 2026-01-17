@@ -1,0 +1,18 @@
+[package]
+name = "review-to-md"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "review_to_md"
+path = "src/lib.rs"
+
+[[bin]]
+name = "review-to-md"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+argh = "0.1"
+anyhow = "1.0"
