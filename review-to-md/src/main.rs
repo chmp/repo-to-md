@@ -3,9 +3,27 @@ use argh::FromArgs;
 use review_to_md::*;
 use std::io::{self, Write};
 
+// Embedded skill file for installation
+const SKILL_CONTENT: &str = include_str!("../../skills/review-to-md/SKILL.md");
+
 #[derive(FromArgs)]
-/// Format GitHub PR comments as markdown
+/// review-to-md: Format GitHub PR comments as markdown
 struct Cli {
+    #[argh(subcommand)]
+    command: Command,
+}
+
+#[derive(FromArgs)]
+#[argh(subcommand)]
+enum Command {
+    Review(ReviewCmd),
+    InstallSkill(InstallSkillCmd),
+}
+
+#[derive(FromArgs)]
+#[argh(subcommand, name = "review")]
+/// Fetch and format PR review comments as markdown
+struct ReviewCmd {
     /// PR number to fetch comments from (not needed if --json-file is provided)
     #[argh(positional)]
     pr_id: Option<u32>,
@@ -30,23 +48,141 @@ struct Cli {
     #[argh(option)]
     review_index: Option<i32>,
 
-    /// filter reviews by author login
+    /// filter reviews by author login (use "@me" for your own reviews)
     #[argh(option)]
     author: Option<String>,
+}
+
+#[derive(FromArgs)]
+#[argh(subcommand, name = "install")]
+/// Install the review-to-md skill for Claude Code
+struct InstallSkillCmd {
+    /// install to local project directory (finds project root via .git or .claude)
+    #[argh(switch)]
+    local: bool,
 }
 
 fn main() -> Result<()> {
     let cli: Cli = argh::from_env();
 
-    let comments = if let Some(json_file) = cli.json_file {
+    match cli.command {
+        Command::Review(cmd) => handle_review_command(cmd),
+        Command::InstallSkill(cmd) => install_skill(cmd.local),
+    }
+}
+
+/// Finds the project root by walking up from current directory
+/// until finding a .git or .claude directory.
+///
+/// # Returns
+///
+/// The path to the project root directory
+///
+/// # Errors
+///
+/// Returns an error if no .git or .claude directory is found in any parent directory
+fn find_project_root() -> Result<std::path::PathBuf> {
+    let mut current = std::env::current_dir().context("Failed to get current directory")?;
+
+    loop {
+        // Check if .git exists
+        if current.join(".git").exists() {
+            return Ok(current);
+        }
+
+        // Check if .claude exists
+        if current.join(".claude").exists() {
+            return Ok(current);
+        }
+
+        // Move up to parent directory
+        match current.parent() {
+            Some(parent) => current = parent.to_path_buf(),
+            None => anyhow::bail!(
+                "Could not find project root. No .git or .claude directory found in any parent directory."
+            ),
+        }
+    }
+}
+
+/// Installs the skill to the appropriate directory.
+///
+/// # Arguments
+///
+/// * `local` - If true, installs to local project directory; otherwise installs globally
+///
+/// # Returns
+///
+/// Ok(()) on successful installation
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Home directory cannot be determined (global install)
+/// - Project root cannot be found (local install)
+/// - Directory creation fails
+/// - File write fails
+fn install_skill(local: bool) -> Result<()> {
+    let skill_dir = if local {
+        // Local project installation - find project root
+        let project_root = find_project_root()?;
+        eprintln!("Found project root: {}", project_root.display());
+        project_root.join(".claude/skills/review-to-md")
+    } else {
+        // Global installation in home directory
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .context("Could not determine home directory")?;
+        std::path::PathBuf::from(home).join(".claude/skills/review-to-md")
+    };
+
+    // Create the directory
+    std::fs::create_dir_all(&skill_dir).context(format!(
+        "Failed to create directory: {}",
+        skill_dir.display()
+    ))?;
+
+    // Write the skill file
+    let skill_file = skill_dir.join("SKILL.md");
+    std::fs::write(&skill_file, SKILL_CONTENT).context(format!(
+        "Failed to write skill file: {}",
+        skill_file.display()
+    ))?;
+
+    let location = if local { "local project" } else { "global" };
+    eprintln!("✓ Installed review-to-md skill to {} directory:", location);
+    eprintln!("  {}", skill_dir.display());
+
+    Ok(())
+}
+
+/// Handles the review subcommand - fetches and formats PR comments.
+///
+/// # Arguments
+///
+/// * `cmd` - The review command parameters
+///
+/// # Returns
+///
+/// Ok(()) on successful execution
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Neither PR ID nor JSON file is provided
+/// - Repository info cannot be auto-detected
+/// - API calls fail
+/// - File operations fail
+fn handle_review_command(cmd: ReviewCmd) -> Result<()> {
+    let comments = if let Some(json_file) = cmd.json_file {
         // Read from local JSON file
         read_comments_from_file(&json_file)?
-    } else if let Some(review_id) = cli.review_id {
+    } else if let Some(review_id) = cmd.review_id {
         // Fetch comments from specific review (skip interactive selection)
         fetch_review_comments(&review_id)?
-    } else if let Some(pr_id) = cli.pr_id {
+    } else if let Some(pr_id) = cmd.pr_id {
         // Interactive/indexed review selection flow
-        let (owner, repo) = if let (Some(owner), Some(repo)) = (cli.owner, cli.repo) {
+        let (owner, repo) = if let (Some(owner), Some(repo)) = (cmd.owner, cmd.repo) {
             (owner, repo)
         } else {
             get_repo_info()
@@ -57,15 +193,21 @@ fn main() -> Result<()> {
         let all_reviews = list_reviews(&owner, &repo, pr_id)?;
 
         // Apply author filter if specified
-        let reviews: Vec<&Review> = if let Some(ref author) = cli.author {
-            let filtered = filter_reviews_by_author(&all_reviews, author);
+        let reviews: Vec<&Review> = if let Some(ref author) = cmd.author {
+            let client = GhClient;
+            let resolved_author = resolve_author_filter(author, &client)?;
+            let filtered = filter_reviews_by_author(&all_reviews, &resolved_author);
             if filtered.is_empty() {
-                anyhow::bail!("No reviews found by author '{}' for PR #{}", author, pr_id);
+                anyhow::bail!(
+                    "No reviews found by author '{}' for PR #{}",
+                    resolved_author,
+                    pr_id
+                );
             }
             eprintln!(
                 "Filtered to {} review(s) by author '{}'",
                 filtered.len(),
-                author
+                resolved_author
             );
             filtered
         } else {
@@ -73,7 +215,7 @@ fn main() -> Result<()> {
         };
 
         // Select review based on CLI options
-        let selected_review = if let Some(index) = cli.review_index {
+        let selected_review = if let Some(index) = cmd.review_index {
             // Direct selection by index
             select_review_by_index(&reviews, index)?
         } else if reviews.len() == 1 {
@@ -223,6 +365,35 @@ pub(crate) fn filter_reviews_by_author<'a>(reviews: &'a [Review], author: &str) 
         .collect()
 }
 
+/// Resolves the author filter, handling the special "@me" value.
+///
+/// If the author is "@me" (case-insensitive), fetches the currently authenticated
+/// user's login from GitHub. Otherwise, returns the author string as-is.
+///
+/// # Arguments
+///
+/// * `author` - The author filter string (may be "@me")
+/// * `client` - GitHub client to fetch current user if needed
+///
+/// # Returns
+///
+/// The resolved author login
+///
+/// # Errors
+///
+/// Returns an error if "@me" is used but the current user cannot be fetched
+fn resolve_author_filter(author: &str, client: &impl GitHubClient) -> Result<String> {
+    if author.eq_ignore_ascii_case("@me") {
+        let current_user = client
+            .get_current_user()
+            .context("Failed to get current user. Are you authenticated with gh CLI?")?;
+        eprintln!("Resolved @me to '{}'", current_user);
+        Ok(current_user)
+    } else {
+        Ok(author.to_string())
+    }
+}
+
 /// Selects a review by index (1-indexed, or -1 for last).
 ///
 /// # Arguments
@@ -346,5 +517,57 @@ mod tests {
         let review_refs: Vec<&Review> = reviews.iter().collect();
 
         assert!(select_review_by_index(&review_refs, 1).is_err());
+    }
+
+    // Mock GitHub client for testing
+    struct MockGitHubClient {
+        username: String,
+    }
+
+    impl GitHubClient for MockGitHubClient {
+        fn get_current_user(&self) -> Result<String> {
+            Ok(self.username.clone())
+        }
+    }
+
+    #[test]
+    fn test_resolve_author_filter_passthrough() {
+        // Non-@me values should pass through unchanged
+        let client = MockGitHubClient {
+            username: "unused".to_string(),
+        };
+        let result = resolve_author_filter("alice", &client).unwrap();
+        assert_eq!(result, "alice");
+    }
+
+    #[test]
+    fn test_resolve_author_filter_lowercase_me() {
+        let client = MockGitHubClient {
+            username: "testuser".to_string(),
+        };
+        let result = resolve_author_filter("@me", &client).unwrap();
+        assert_eq!(result, "testuser");
+    }
+
+    #[test]
+    fn test_resolve_author_filter_uppercase_me() {
+        let client = MockGitHubClient {
+            username: "testuser".to_string(),
+        };
+        let result = resolve_author_filter("@ME", &client).unwrap();
+        assert_eq!(result, "testuser");
+    }
+
+    #[test]
+    fn test_resolve_author_filter_mixed_case_me() {
+        let client = MockGitHubClient {
+            username: "testuser".to_string(),
+        };
+
+        let result = resolve_author_filter("@Me", &client).unwrap();
+        assert_eq!(result, "testuser");
+
+        let result = resolve_author_filter("@mE", &client).unwrap();
+        assert_eq!(result, "testuser");
     }
 }

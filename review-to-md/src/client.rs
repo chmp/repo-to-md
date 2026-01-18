@@ -82,6 +82,17 @@ struct CommentsConnection {
     nodes: Vec<GraphQLComment>,
 }
 
+// Response structure for fetching the current user
+#[derive(Debug, Deserialize)]
+struct ViewerData {
+    viewer: Viewer,
+}
+
+#[derive(Debug, Deserialize)]
+struct Viewer {
+    login: String,
+}
+
 // GraphQL comment structure
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -100,6 +111,34 @@ struct GraphQLComment {
 #[derive(Debug, Deserialize)]
 struct GraphQLAuthor {
     login: String,
+}
+
+/// Trait for GitHub API operations
+pub trait GitHubClient {
+    /// Fetches the currently authenticated user's login
+    fn get_current_user(&self) -> Result<String>;
+}
+
+/// Real GitHub client using gh CLI
+pub struct GhClient;
+
+impl GitHubClient for GhClient {
+    fn get_current_user(&self) -> Result<String> {
+        let query = r#"
+            query {
+              viewer {
+                login
+              }
+            }
+        "#;
+
+        let json = run_graphql_query(query, &[])?;
+
+        let response: GraphQLResponse<ViewerData> =
+            serde_json::from_str(&json).context("Failed to parse viewer query response")?;
+
+        Ok(response.data.viewer.login)
+    }
 }
 
 /// Lists all reviews for a pull request.
