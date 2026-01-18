@@ -17,21 +17,39 @@ Prerequisites:
 To format the comments for pull request 78, use
 
 ```bash
-review-to-md 78
+review-to-md review 78
 ```
 
-This commands auto-detects the repository from git remote, if it configured. To 
+This commands auto-detects the repository from git remote, if it configured. To
 specify owner and repository explicitly, use:
 
 ```bash
-review-to-md <PR_NUMBER> --owner <OWNER> --repo <REPO>
+review-to-md review <PR_NUMBER> --owner <OWNER> --repo <REPO>
 ```
 
 Example:
 
 ```bash
-review-to-md 78 --owner chmp --repo review-to-md
+review-to-md review 78 --owner chmp --repo review-to-md
 ```
+
+### Skill installation
+
+Install the Claude Code skill:
+
+```bash
+# Install globally (available in all projects)
+review-to-md install-skill
+
+# Install locally (project-specific, finds project root via .git or .claude)
+review-to-md install-skill --local
+```
+
+The skill will be installed to:
+- Global: `~/.claude/skills/review-to-md/`
+- Local: `<project-root>/.claude/skills/review-to-md/`
+
+Once installed, Claude Code will automatically use this skill when working with PR reviews.
 
 ### Review selection options
 
@@ -39,31 +57,31 @@ By default, the tool presents an interactive menu to select which review to proc
 
 **Direct review ID**:
 ```bash
-review-to-md 78 --review-id PRR_kwDOAbcdef123456
+review-to-md review 78 --review-id PRR_kwDOAbcdef123456
 ```
 
 **By index** (1-indexed, -1 for last review):
 ```bash
-review-to-md 78 --review-index 1     # First review
-review-to-md 78 --review-index -1    # Last review
+review-to-md review 78 --review-index 1     # First review
+review-to-md review 78 --review-index -1    # Last review
 ```
 
 **Filter by author**:
 ```bash
-review-to-md 78 --author username    # Select from reviews by 'username'
-review-to-md 78 --author @me         # Select from your own reviews
+review-to-md review 78 --author username    # Select from reviews by 'username'
+review-to-md review 78 --author @me         # Select from your own reviews
 ```
 
 **Combine filters**:
 ```bash
-review-to-md 78 --author username --review-index -1  # Last review by 'username'
+review-to-md review 78 --author username --review-index -1  # Last review by 'username'
 ```
 
 If `--author` filters to exactly one review, it will be auto-selected (no interactive prompt).
 
 **From JSON file** (for testing/offline use):
 ```bash
-review-to-md --json-file examples/simple_comment.json
+review-to-md review --json-file examples/simple_comment.json
 ```
 
 ## Output format

@@ -85,32 +85,52 @@ Windows)
 Fetch comments with interactive review selection:
 
 ```bash
-cargo run -- <PR_NUMBER>
-cargo run -- <PR_NUMBER> --owner <OWNER> --repo <REPO>
+cargo run -- review <PR_NUMBER>
+cargo run -- review <PR_NUMBER> --owner <OWNER> --repo <REPO>
 ```
 
 Fetch comments from a specific review (skip interactive selection):
 
 ```bash
-cargo run -- <PR_NUMBER> --review-id <REVIEW_ID>
-cargo run -- <PR_NUMBER> --review-index 1
-cargo run -- <PR_NUMBER> --review-index -1
+cargo run -- review <PR_NUMBER> --review-id <REVIEW_ID>
+cargo run -- review <PR_NUMBER> --review-index 1
+cargo run -- review <PR_NUMBER> --review-index -1
 ```
 
 Filter reviews by author:
 
 ```bash
-cargo run -- <PR_NUMBER> --author <USERNAME>
-cargo run -- <PR_NUMBER> --author <USERNAME> --review-index -1
-cargo run -- <PR_NUMBER> --author @me
-cargo run -- <PR_NUMBER> --author @me --review-index -1
+cargo run -- review <PR_NUMBER> --author <USERNAME>
+cargo run -- review <PR_NUMBER> --author <USERNAME> --review-index -1
+cargo run -- review <PR_NUMBER> --author @me
+cargo run -- review <PR_NUMBER> --author @me --review-index -1
 ```
 
 Read from JSON file:
 
 ```bash
-cargo run -- --json-file examples/simple_comment.json
+cargo run -- review --json-file examples/simple_comment.json
 ```
+
+### Install skill
+
+**Note to Claude Code users**: The information below documents the skill installation functionality. This is for user reference only - skill installation should always be performed by the user, not automatically by Claude Code.
+
+Install the Claude Code skill globally:
+
+```bash
+cargo run -- install-skill
+```
+
+Install locally to current project (finds project root via .git or .claude directory):
+
+```bash
+cargo run -- install-skill --local
+```
+
+Skill installation locations:
+- Global: `~/.claude/skills/review-to-md/`
+- Local: `<project-root>/.claude/skills/review-to-md/` (where project root is found by walking up from current directory)
 
 ### Temporary files and exploration scripts
 
@@ -304,3 +324,26 @@ When modifying the public CLI interface (adding/removing/changing flags):
   - ✓ "How it works"
   - ✗ "How It Works"
 - Exception: Proper nouns and acronyms remain capitalized (e.g., "GitHub API usage")
+
+## Claude Code skills
+
+### Skills documentation
+
+Skills are modular capabilities that extend Claude Code's functionality. For complete documentation on creating and using skills:
+
+- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills) - How to create, install, and use skills in Claude Code
+
+### Skill installation locations
+
+- **Global skills**: `~/.claude/skills/` - Available across all projects
+- **Project skills**: `.claude/skills/` - Shared with team, version controlled
+
+### review-to-md skill
+
+The review-to-md skill is bundled with the binary and can be installed using:
+
+```bash
+review-to-md install-skill [--local]
+```
+
+The skill enables Claude Code to automatically use review-to-md when working with PR reviews.

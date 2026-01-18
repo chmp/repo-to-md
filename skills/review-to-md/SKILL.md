@@ -13,8 +13,8 @@ LLM-friendly markdown.
 **Get the last review by a specific user**:
 
 ```bash
-review-to-md <PR_NUMBER> --author <USERNAME> --review-index -1
-review-to-md <PR_NUMBER> --author @me --review-index -1  # Your own reviews
+review-to-md review <PR_NUMBER> --author <USERNAME> --review-index -1
+review-to-md review <PR_NUMBER> --author @me --review-index -1  # Your own reviews
 ```
 
 This is the most common workflow: fetch the most recent review from a specific
@@ -32,7 +32,7 @@ The tool auto-detects the repository from `git remote get-url origin`.
 **Interactive selection**:
 
 ```bash
-review-to-md <PR_NUMBER>
+review-to-md review <PR_NUMBER>
 ```
 
 Presents a numbered menu to select from available reviews.
@@ -40,14 +40,14 @@ Presents a numbered menu to select from available reviews.
 **Filter by author** (interactive if multiple reviews):
 
 ```bash
-review-to-md <PR_NUMBER> --author <USERNAME>
-review-to-md <PR_NUMBER> --author @me  # Your own reviews
+review-to-md review <PR_NUMBER> --author <USERNAME>
+review-to-md review <PR_NUMBER> --author @me  # Your own reviews
 ```
 
 **By index** (1-indexed, -1 for last):
 
 ```bash
-review-to-md <PR_NUMBER> --review-index -1
+review-to-md review <PR_NUMBER> --review-index -1
 ```
 
 ## Output format
