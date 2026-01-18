@@ -21,7 +21,8 @@ cargo clippy --all-targets  # Lint for issues
 cargo test                  # Run test suite
 ```
 
-All three must pass with no warnings or errors. This is mandatory before committing or submitting work.
+All three must pass with no warnings or errors. This is mandatory before
+committing or submitting work.
 
 ### Format
 
@@ -114,31 +115,38 @@ cargo run -- review --json-file examples/simple_comment.json
 
 ### Install skill
 
-**Note to Claude Code users**: The information below documents the skill installation functionality. This is for user reference only - skill installation should always be performed by the user, not automatically by Claude Code.
+**Note to Claude Code users**: The information below documents the skill
+installation functionality. This is for user reference only - skill installation
+should always be performed by the user, not automatically by Claude Code.
 
 Install the Claude Code skill globally:
 
 ```bash
-cargo run -- install-skill
+cargo run -- install
 ```
 
-Install locally to current project (finds project root via .git or .claude directory):
+Install locally to current project (finds project root via .git or .claude
+directory):
 
 ```bash
-cargo run -- install-skill --local
+cargo run -- install --local
 ```
 
 Skill installation locations:
+
 - Global: `~/.claude/skills/review-to-md/`
-- Local: `<project-root>/.claude/skills/review-to-md/` (where project root is found by walking up from current directory)
+- Local: `<project-root>/.claude/skills/review-to-md/` (where project root is
+  found by walking up from current directory)
 
 ### Temporary files and exploration scripts
 
 Temporary files and exploration scripts should be placed in:
+
 - `target/tmp/` - For build-related temporary files
 - `tmp/` - For manual exploration scripts and outputs
 
-Do not commit exploration scripts or their output files. Add them to `.gitignore` if needed.
+Do not commit exploration scripts or their output files. Add them to
+`.gitignore` if needed.
 
 ## Architecture
 
@@ -161,12 +169,13 @@ examples/            - Test fixtures with JSON inputs and expected markdown outp
 
 **Module responsibilities:**
 
-- **main.rs** - CLI interface, handles `--review-id` option and interactive review
-  selection
+- **main.rs** - CLI interface, handles `--review-id` option and interactive
+  review selection
 - **client.rs** - GraphQL queries via `gh` CLI, fetches reviews and comments
 - **formatting.rs** - Transforms comments into markdown with inline code blocks
 - **diff.rs** - Parses unified diffs, extracts line numbers, handles truncation
-- **language.rs** - Detects languages from file extensions, provides comment syntax
+- **language.rs** - Detects languages from file extensions, provides comment
+  syntax
 - **lib.rs** - Public API, re-exports key functions and types
 
 ### Key components
@@ -194,16 +203,19 @@ examples/            - Test fixtures with JSON inputs and expected markdown outp
 - Returns `Review` and `Comment` structs
 - Includes `isMinimized` field (fetched but not used yet)
 - `GitHubClient` trait - Abstracts GitHub API operations for testing
-- `GhClient` - Implements GitHubClient using gh CLI. The `get_current_user()` method
-  fetches the authenticated user's login via the `viewer` query, used to resolve `--author @me`.
-- **Security**: GraphQL queries use parameterized variables (passed via `gh -F` flags),
-  not string interpolation. The `gh` CLI handles escaping and injection prevention.
-  Variables are never interpolated directly into the query string.
+- `GhClient` - Implements GitHubClient using gh CLI. The `get_current_user()`
+  method fetches the authenticated user's login via the `viewer` query, used to
+  resolve `--author @me`.
+- **Security**: GraphQL queries use parameterized variables (passed via `gh -F`
+  flags), not string interpolation. The `gh` CLI handles escaping and injection
+  prevention. Variables are never interpolated directly into the query string.
 
 **GitHub GraphQL API Documentation:**
 
-- [GraphQL Queries Reference](https://docs.github.com/en/graphql/reference/queries) - Available root-level queries including `viewer`
-- [GraphQL Objects Reference](https://docs.github.com/en/graphql/reference/objects) - Object types like `User`, `PullRequest`, `Review`
+- [GraphQL Queries Reference](https://docs.github.com/en/graphql/reference/queries) -
+  Available root-level queries including `viewer`
+- [GraphQL Objects Reference](https://docs.github.com/en/graphql/reference/objects) -
+  Object types like `User`, `PullRequest`, `Review`
 
 **Formatting engine (formatting.rs):**
 
@@ -281,6 +293,7 @@ Organize code in this order:
 4. **General support functions** - Helpers used by multiple public functions
 
 **Example from client.rs**:
+
 ```rust
 // 1. Public types
 pub struct Review { ... }
@@ -317,21 +330,26 @@ When modifying the public CLI interface (adding/removing/changing flags):
 ## Documentation Style Guidelines
 
 ### Heading capitalization
-- Use sentence case for all headings (capitalize only the first word and proper nouns)
+
+- Use sentence case for all headings (capitalize only the first word and proper
+  nouns)
 - Examples:
   - ✓ "Output format"
   - ✗ "Output Format"
   - ✓ "How it works"
   - ✗ "How It Works"
-- Exception: Proper nouns and acronyms remain capitalized (e.g., "GitHub API usage")
+- Exception: Proper nouns and acronyms remain capitalized (e.g., "GitHub API
+  usage")
 
 ## Claude Code skills
 
 ### Skills documentation
 
-Skills are modular capabilities that extend Claude Code's functionality. For complete documentation on creating and using skills:
+Skills are modular capabilities that extend Claude Code's functionality. For
+complete documentation on creating and using skills:
 
-- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills) - How to create, install, and use skills in Claude Code
+- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills) -
+  How to create, install, and use skills in Claude Code
 
 ### Skill installation locations
 
@@ -343,7 +361,8 @@ Skills are modular capabilities that extend Claude Code's functionality. For com
 The review-to-md skill is bundled with the binary and can be installed using:
 
 ```bash
-review-to-md install-skill [--local]
+review-to-md install [--local]
 ```
 
-The skill enables Claude Code to automatically use review-to-md when working with PR reviews.
+The skill enables Claude Code to automatically use review-to-md when working
+with PR reviews.
