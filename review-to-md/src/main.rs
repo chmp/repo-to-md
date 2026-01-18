@@ -54,7 +54,7 @@ struct ReviewCmd {
 }
 
 #[derive(FromArgs)]
-#[argh(subcommand, name = "install-skill")]
+#[argh(subcommand, name = "install")]
 /// Install the review-to-md skill for Claude Code
 struct InstallSkillCmd {
     /// install to local project directory (finds project root via .git or .claude)
