@@ -16,6 +16,9 @@ Get the last review in GitHub by the current user for a PR in the git repository
 review-to-md review <PR_NUMBER> --author @me --review-index -1
 ```
 
+The command can be executed anywhere in the repository. There is no need to
+change the working directory.
+
 ## Prerequisites
 
 If the command fails, please note potential failure cases:
