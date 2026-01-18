@@ -39,47 +39,56 @@ Install the Claude Code skill:
 
 ```bash
 # Install globally (available in all projects)
-review-to-md install-skill
+review-to-md install
 
 # Install locally (project-specific, finds project root via .git or .claude)
-review-to-md install-skill --local
+review-to-md install --local
 ```
 
 The skill will be installed to:
+
 - Global: `~/.claude/skills/review-to-md/`
 - Local: `<project-root>/.claude/skills/review-to-md/`
 
-Once installed, Claude Code will automatically use this skill when working with PR reviews.
+Once installed, Claude Code will automatically use this skill when working with
+PR reviews.
 
 ### Review selection options
 
-By default, the tool presents an interactive menu to select which review to process. Alternative selection methods:
+By default, the tool presents an interactive menu to select which review to
+process. Alternative selection methods:
 
 **Direct review ID**:
+
 ```bash
 review-to-md review 78 --review-id PRR_kwDOAbcdef123456
 ```
 
 **By index** (1-indexed, -1 for last review):
+
 ```bash
 review-to-md review 78 --review-index 1     # First review
 review-to-md review 78 --review-index -1    # Last review
 ```
 
 **Filter by author**:
+
 ```bash
 review-to-md review 78 --author username    # Select from reviews by 'username'
 review-to-md review 78 --author @me         # Select from your own reviews
 ```
 
 **Combine filters**:
+
 ```bash
 review-to-md review 78 --author username --review-index -1  # Last review by 'username'
 ```
 
-If `--author` filters to exactly one review, it will be auto-selected (no interactive prompt).
+If `--author` filters to exactly one review, it will be auto-selected (no
+interactive prompt).
 
 **From JSON file** (for testing/offline use):
+
 ```bash
 review-to-md review --json-file examples/simple_comment.json
 ```
@@ -115,12 +124,15 @@ Each file section includes:
 
 ## How it works
 
-1. Detects repository owner and name from `git remote get-url origin` (or uses provided arguments)
-2. Fetches available reviews for the PR using GitHub GraphQL API via `gh api graphql`
+1. Detects repository owner and name from `git remote get-url origin` (or uses
+   provided arguments)
+2. Fetches available reviews for the PR using GitHub GraphQL API via
+   `gh api graphql`
 3. Selects a specific review either:
    - Interactively via numbered menu (default)
    - By review ID using `--review-id`
    - By index using `--review-index` (optionally filtered by `--author`)
 4. Fetches all comments from the selected review via GraphQL
 5. Groups comments by file and diff hunk
-6. Formats as markdown with language-appropriate syntax highlighting and embedded review comments
+6. Formats as markdown with language-appropriate syntax highlighting and
+   embedded review comments
