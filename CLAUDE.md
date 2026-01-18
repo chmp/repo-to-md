@@ -102,6 +102,8 @@ Filter reviews by author:
 ```bash
 cargo run -- <PR_NUMBER> --author <USERNAME>
 cargo run -- <PR_NUMBER> --author <USERNAME> --review-index -1
+cargo run -- <PR_NUMBER> --author @me
+cargo run -- <PR_NUMBER> --author @me --review-index -1
 ```
 
 Read from JSON file:
@@ -171,9 +173,17 @@ examples/            - Test fixtures with JSON inputs and expected markdown outp
 - GraphQL queries via `gh api graphql` command
 - Returns `Review` and `Comment` structs
 - Includes `isMinimized` field (fetched but not used yet)
+- `GitHubClient` trait - Abstracts GitHub API operations for testing
+- `GhClient` - Implements GitHubClient using gh CLI. The `get_current_user()` method
+  fetches the authenticated user's login via the `viewer` query, used to resolve `--author @me`.
 - **Security**: GraphQL queries use parameterized variables (passed via `gh -F` flags),
   not string interpolation. The `gh` CLI handles escaping and injection prevention.
   Variables are never interpolated directly into the query string.
+
+**GitHub GraphQL API Documentation:**
+
+- [GraphQL Queries Reference](https://docs.github.com/en/graphql/reference/queries) - Available root-level queries including `viewer`
+- [GraphQL Objects Reference](https://docs.github.com/en/graphql/reference/objects) - Object types like `User`, `PullRequest`, `Review`
 
 **Formatting engine (formatting.rs):**
 

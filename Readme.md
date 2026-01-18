@@ -51,6 +51,7 @@ review-to-md 78 --review-index -1    # Last review
 **Filter by author**:
 ```bash
 review-to-md 78 --author username    # Select from reviews by 'username'
+review-to-md 78 --author @me         # Select from your own reviews
 ```
 
 **Combine filters**:

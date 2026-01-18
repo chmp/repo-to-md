@@ -30,7 +30,7 @@ struct Cli {
     #[argh(option)]
     review_index: Option<i32>,
 
-    /// filter reviews by author login
+    /// filter reviews by author login (use "@me" for your own reviews)
     #[argh(option)]
     author: Option<String>,
 }
@@ -58,14 +58,20 @@ fn main() -> Result<()> {
 
         // Apply author filter if specified
         let reviews: Vec<&Review> = if let Some(ref author) = cli.author {
-            let filtered = filter_reviews_by_author(&all_reviews, author);
+            let client = GhClient;
+            let resolved_author = resolve_author_filter(author, &client)?;
+            let filtered = filter_reviews_by_author(&all_reviews, &resolved_author);
             if filtered.is_empty() {
-                anyhow::bail!("No reviews found by author '{}' for PR #{}", author, pr_id);
+                anyhow::bail!(
+                    "No reviews found by author '{}' for PR #{}",
+                    resolved_author,
+                    pr_id
+                );
             }
             eprintln!(
                 "Filtered to {} review(s) by author '{}'",
                 filtered.len(),
-                author
+                resolved_author
             );
             filtered
         } else {
@@ -223,6 +229,35 @@ pub(crate) fn filter_reviews_by_author<'a>(reviews: &'a [Review], author: &str) 
         .collect()
 }
 
+/// Resolves the author filter, handling the special "@me" value.
+///
+/// If the author is "@me" (case-insensitive), fetches the currently authenticated
+/// user's login from GitHub. Otherwise, returns the author string as-is.
+///
+/// # Arguments
+///
+/// * `author` - The author filter string (may be "@me")
+/// * `client` - GitHub client to fetch current user if needed
+///
+/// # Returns
+///
+/// The resolved author login
+///
+/// # Errors
+///
+/// Returns an error if "@me" is used but the current user cannot be fetched
+fn resolve_author_filter(author: &str, client: &impl GitHubClient) -> Result<String> {
+    if author.eq_ignore_ascii_case("@me") {
+        let current_user = client
+            .get_current_user()
+            .context("Failed to get current user. Are you authenticated with gh CLI?")?;
+        eprintln!("Resolved @me to '{}'", current_user);
+        Ok(current_user)
+    } else {
+        Ok(author.to_string())
+    }
+}
+
 /// Selects a review by index (1-indexed, or -1 for last).
 ///
 /// # Arguments
@@ -346,5 +381,57 @@ mod tests {
         let review_refs: Vec<&Review> = reviews.iter().collect();
 
         assert!(select_review_by_index(&review_refs, 1).is_err());
+    }
+
+    // Mock GitHub client for testing
+    struct MockGitHubClient {
+        username: String,
+    }
+
+    impl GitHubClient for MockGitHubClient {
+        fn get_current_user(&self) -> Result<String> {
+            Ok(self.username.clone())
+        }
+    }
+
+    #[test]
+    fn test_resolve_author_filter_passthrough() {
+        // Non-@me values should pass through unchanged
+        let client = MockGitHubClient {
+            username: "unused".to_string(),
+        };
+        let result = resolve_author_filter("alice", &client).unwrap();
+        assert_eq!(result, "alice");
+    }
+
+    #[test]
+    fn test_resolve_author_filter_lowercase_me() {
+        let client = MockGitHubClient {
+            username: "testuser".to_string(),
+        };
+        let result = resolve_author_filter("@me", &client).unwrap();
+        assert_eq!(result, "testuser");
+    }
+
+    #[test]
+    fn test_resolve_author_filter_uppercase_me() {
+        let client = MockGitHubClient {
+            username: "testuser".to_string(),
+        };
+        let result = resolve_author_filter("@ME", &client).unwrap();
+        assert_eq!(result, "testuser");
+    }
+
+    #[test]
+    fn test_resolve_author_filter_mixed_case_me() {
+        let client = MockGitHubClient {
+            username: "testuser".to_string(),
+        };
+
+        let result = resolve_author_filter("@Me", &client).unwrap();
+        assert_eq!(result, "testuser");
+
+        let result = resolve_author_filter("@mE", &client).unwrap();
+        assert_eq!(result, "testuser");
     }
 }

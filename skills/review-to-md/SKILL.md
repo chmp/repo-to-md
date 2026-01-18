@@ -14,10 +14,11 @@ LLM-friendly markdown.
 
 ```bash
 review-to-md <PR_NUMBER> --author <USERNAME> --review-index -1
+review-to-md <PR_NUMBER> --author @me --review-index -1  # Your own reviews
 ```
 
 This is the most common workflow: fetch the most recent review from a specific
-reviewer for a PR in the current repository.
+reviewer (or yourself with @me) for a PR in the current repository.
 
 ## Prerequisites
 
@@ -40,6 +41,7 @@ Presents a numbered menu to select from available reviews.
 
 ```bash
 review-to-md <PR_NUMBER> --author <USERNAME>
+review-to-md <PR_NUMBER> --author @me  # Your own reviews
 ```
 
 **By index** (1-indexed, -1 for last):
