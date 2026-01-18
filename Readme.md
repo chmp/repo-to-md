@@ -134,5 +134,5 @@ Each file section includes:
    - By index using `--review-index` (optionally filtered by `--author`)
 4. Fetches all comments from the selected review via GraphQL
 5. Groups comments by file and diff hunk
-6. Formats as markdown with language-appropriate syntax highlighting and
-   embedded review comments
+6. Formats the review as markdown with code blocks that embed review comments as
+   code comments
