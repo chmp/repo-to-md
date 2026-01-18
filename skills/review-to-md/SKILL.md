@@ -5,34 +5,34 @@ description: Fetches GitHub pull request review comments for the current reposit
 
 # Fetching PR reviews
 
-Fetches PR review comments for the current repository and formats them as
+Fetches PR review comments for the git project from GitHub and formats them as
 LLM-friendly markdown.
 
 ## Primary usage
 
-**Get the last review by a specific user**:
+Get the last review in GitHub by the current user for a PR in the git repository
 
 ```bash
-review-to-md review <PR_NUMBER> --author <USERNAME> --review-index -1
-review-to-md review <PR_NUMBER> --author @me --review-index -1  # Your own reviews
+review-to-md review <PR_NUMBER> --author @me --review-index -1
 ```
-
-This is the most common workflow: fetch the most recent review from a specific
-reviewer (or yourself with @me) for a PR in the current repository.
 
 ## Prerequisites
 
-- `gh` CLI must be installed and authenticated
-- Must be run from within a git repository with a configured remote
+If the command fails, please note potential failure cases:
 
-The tool auto-detects the repository from `git remote get-url origin`.
+- `gh` CLI must be installed and authenticated
+- `review-to-md` must be run from within a git repository with a configured
+  remote
+
+The tool auto-detects the repository from `git remote get-url origin` and the
+current user from the authentication used for the `gh` command.
 
 ## Alternative usage
 
-**Interactive selection**:
+Get the last review by a specific user:
 
 ```bash
-review-to-md review <PR_NUMBER>
+review-to-md review <PR_NUMBER> --author <USERNAME> --review-index -1
 ```
 
 Presents a numbered menu to select from available reviews.
@@ -41,7 +41,7 @@ Presents a numbered menu to select from available reviews.
 
 ```bash
 review-to-md review <PR_NUMBER> --author <USERNAME>
-review-to-md review <PR_NUMBER> --author @me  # Your own reviews
+review-to-md review <PR_NUMBER> --author @me  # The current user
 ```
 
 **By index** (1-indexed, -1 for last):
@@ -49,6 +49,17 @@ review-to-md review <PR_NUMBER> --author @me  # Your own reviews
 ```bash
 review-to-md review <PR_NUMBER> --review-index -1
 ```
+
+## Non-recommended usage
+
+`review-to-md` supports selecting the review interactively, by omitting the
+corresponding arguments.
+
+```bash
+review-to-md review <PR_NUMBER>
+```
+
+**Please avoid this usage.**
 
 ## Output format
 
