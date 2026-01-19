@@ -114,15 +114,15 @@ struct GraphQLAuthor {
 }
 
 /// Trait for GitHub API operations
-pub trait GitHubClient {
+pub trait GetCurrentUserClient {
     /// Fetches the currently authenticated user's login
     fn get_current_user(&self) -> Result<String>;
 }
 
 /// Real GitHub client using gh CLI
-pub struct GhClient;
+pub struct GithubClient;
 
-impl GitHubClient for GhClient {
+impl GetCurrentUserClient for GithubClient {
     fn get_current_user(&self) -> Result<String> {
         let query = r#"
             query {

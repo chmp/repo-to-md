@@ -210,7 +210,7 @@ fn handle_review_command(cmd: ReviewCommand) -> Result<()> {
 
         // Apply author filter if specified
         let reviews: Vec<&Review> = if let Some(ref author) = cmd.author {
-            let client = GhClient;
+            let client = GithubClient;
             let resolved_author = resolve_author_filter(author, &client)?;
             let filtered = filter_reviews_by_author(&all_reviews, &resolved_author);
             if filtered.is_empty() {
@@ -398,7 +398,7 @@ pub(crate) fn filter_reviews_by_author<'a>(reviews: &'a [Review], author: &str) 
 /// # Errors
 ///
 /// Returns an error if "@me" is used but the current user cannot be fetched
-fn resolve_author_filter(author: &str, client: &impl GitHubClient) -> Result<String> {
+fn resolve_author_filter(author: &str, client: &impl GetCurrentUserClient) -> Result<String> {
     if author.eq_ignore_ascii_case("@me") {
         let current_user = client
             .get_current_user()
@@ -451,7 +451,7 @@ fn handle_query_command(cmd: String, args: Vec<String>) -> Result<()> {
                 args.is_empty(),
                 "GetCurrentUser does not expect any arguments"
             );
-            serde_json::to_writer(std::io::stdout(), &GhClient.get_current_user()?)?;
+            serde_json::to_writer(std::io::stdout(), &GithubClient.get_current_user()?)?;
         }
         "ListReviews" => {
             let Ok([owner, repo, pr_number]) = <[_; 3]>::try_from(args) else {
@@ -572,7 +572,7 @@ mod tests {
         username: String,
     }
 
-    impl GitHubClient for MockGitHubClient {
+    impl GetCurrentUserClient for MockGitHubClient {
         fn get_current_user(&self) -> Result<String> {
             Ok(self.username.clone())
         }
