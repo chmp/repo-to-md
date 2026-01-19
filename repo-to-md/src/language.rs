@@ -50,7 +50,7 @@ pub(crate) fn detect_language(path: &str) -> &str {
 /// # Returns
 ///
 /// The comment prefix string (e.g., "//" for most languages, "#" for Python/Bash, "<!--" for HTML)
-pub(crate) fn get_comment_prefix(language: &str) -> &str {
+pub(crate) fn get_comment_prefix(language: &str) -> &'static str {
     match language {
         "python" | "bash" | "ruby" | "yaml" | "toml" => "#",
         "html" | "markdown" => "<!--",
@@ -70,7 +70,7 @@ pub(crate) fn get_comment_prefix(language: &str) -> &str {
 /// # Returns
 ///
 /// The comment suffix string (" -->" for HTML/Markdown, empty string for most languages)
-pub(crate) fn get_comment_suffix(language: &str) -> &str {
+pub(crate) fn get_comment_suffix(language: &str) -> &'static str {
     match language {
         "html" | "markdown" => " -->",
         _ => "",
