@@ -3,13 +3,13 @@
 // This module handles all interactions with the GitHub GraphQL API via the `gh` CLI.
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::process::Command;
 
 use crate::{Comment, User};
 
 /// A Pull Request review.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Review {
     /// The GitHub node ID of the review
     pub id: String,
@@ -26,12 +26,12 @@ pub struct Review {
     pub comments: CommentCount,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ReviewAuthor {
     pub login: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommentCount {
     pub total_count: u32,

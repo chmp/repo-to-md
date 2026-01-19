@@ -14,7 +14,7 @@ pub use client::{
 pub use formatting::format_comments_as_markdown;
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::Command;
 
@@ -22,7 +22,7 @@ use std::process::Command;
 ///
 /// Represents a single comment on a PR, including the file path, line number,
 /// comment text, diff context, and the user who made the comment.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Comment {
     /// The file path relative to the repository root
     pub path: String,
@@ -37,7 +37,7 @@ pub struct Comment {
 }
 
 /// A GitHub user.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct User {
     /// The user's GitHub login/username
     pub login: String,

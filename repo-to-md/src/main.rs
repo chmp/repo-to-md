@@ -1,7 +1,8 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use argh::FromArgs;
-use review_to_md::*;
 use std::io::{self, Write};
+
+use review_to_md::*;
 
 // Embedded skill file for installation
 const SKILL_CONTENT: &str = include_str!("../../skills/review-to-md/SKILL.md");
@@ -16,14 +17,15 @@ struct Cli {
 #[derive(FromArgs)]
 #[argh(subcommand)]
 enum Command {
-    Review(ReviewCmd),
-    InstallSkill(InstallSkillCmd),
+    Review(ReviewCommand),
+    InstallSkill(InstallSkillCommand),
+    Query(QueryCommand),
 }
 
 #[derive(FromArgs)]
 #[argh(subcommand, name = "review")]
 /// Fetch and format PR review comments as markdown
-struct ReviewCmd {
+struct ReviewCommand {
     /// PR number to fetch comments from (not needed if --json-file is provided)
     #[argh(positional)]
     pr_id: Option<u32>,
@@ -56,10 +58,23 @@ struct ReviewCmd {
 #[derive(FromArgs)]
 #[argh(subcommand, name = "install")]
 /// Install the repo-to-md skill for Claude Code
-struct InstallSkillCmd {
+struct InstallSkillCommand {
     /// install to local project directory (finds project root via .git or .claude)
     #[argh(switch)]
     local: bool,
+}
+
+#[derive(FromArgs)]
+#[argh(subcommand, name = ":query")]
+/// Perform one of the internal queries used for debugging dev
+struct QueryCommand {
+    /// the command as a string spec
+    #[argh(positional)]
+    query: String,
+
+    #[argh(positional)]
+    // the arguments of the query
+    args: Vec<String>,
 }
 
 fn main() -> Result<()> {
@@ -67,7 +82,8 @@ fn main() -> Result<()> {
 
     match cli.command {
         Command::Review(cmd) => handle_review_command(cmd),
-        Command::InstallSkill(cmd) => install_skill(cmd.local),
+        Command::InstallSkill(cmd) => handle_install_skill_command(cmd.local),
+        Command::Query(cmd) => handle_query_command(cmd.query, cmd.args),
     }
 }
 
@@ -122,7 +138,7 @@ fn find_project_root() -> Result<std::path::PathBuf> {
 /// - Project root cannot be found (local install)
 /// - Directory creation fails
 /// - File write fails
-fn install_skill(local: bool) -> Result<()> {
+fn handle_install_skill_command(local: bool) -> Result<()> {
     let skill_dir = if local {
         // Local project installation - find project root
         let project_root = find_project_root()?;
@@ -173,7 +189,7 @@ fn install_skill(local: bool) -> Result<()> {
 /// - Repository info cannot be auto-detected
 /// - API calls fail
 /// - File operations fail
-fn handle_review_command(cmd: ReviewCmd) -> Result<()> {
+fn handle_review_command(cmd: ReviewCommand) -> Result<()> {
     let comments = if let Some(json_file) = cmd.json_file {
         // Read from local JSON file
         read_comments_from_file(&json_file)?
@@ -426,6 +442,38 @@ pub(crate) fn select_review_by_index<'a>(reviews: &[&'a Review], index: i32) -> 
     };
 
     Ok(selected)
+}
+
+fn handle_query_command(cmd: String, args: Vec<String>) -> Result<()> {
+    match cmd.as_str() {
+        "GetCurrentUser" => {
+            ensure!(
+                args.is_empty(),
+                "GetCurrentUser does not expect any arguments"
+            );
+            serde_json::to_writer(std::io::stdout(), &GhClient.get_current_user()?)?;
+        }
+        "ListReviews" => {
+            let Ok([owner, repo, pr_number]) = <[_; 3]>::try_from(args) else {
+                bail!("ListRevies should be called with owner, repo, pr_number");
+            };
+            let pr_number: u32 = pr_number.parse()?;
+            let result = list_reviews(&owner, &repo, pr_number)?;
+            serde_json::to_writer(std::io::stdout(), &result)?;
+        }
+        "FetchReviewComments" => {
+            let Ok([review_id]) = <[_; 1]>::try_from(args) else {
+                bail!("FetchReviewComments should be called with the review_id");
+            };
+            let result = fetch_review_comments(&review_id)?;
+            serde_json::to_writer(std::io::stdout(), &result)?;
+        }
+        cmd => bail!("unkown command {cmd:?}"),
+    }
+
+    std::io::stdout().flush()?;
+
+    Ok(())
 }
 
 #[cfg(test)]
