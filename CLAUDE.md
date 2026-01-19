@@ -5,7 +5,7 @@ code in this repository.
 
 ## Project Overview
 
-`review-to-md` is a Rust CLI tool that fetches GitHub PR review comments via the
+`repo-to-md` is a Rust CLI tool that fetches GitHub PR review comments via the
 `gh` CLI and formats them as markdown code blocks with inline comments. The
 output is designed for consumption by LLMs when addressing PR feedback.
 
@@ -78,8 +78,7 @@ cargo test test_name
 cargo build --release
 ```
 
-Binary location: `target/release/review-to-md` (or `review-to-md.exe` on
-Windows)
+Binary location: `target/release/repo-to-md` (or `repo-to-md.exe` on Windows)
 
 ### Run
 
@@ -138,6 +137,10 @@ Skill installation locations:
 - Local: `<project-root>/.claude/skills/review-to-md/` (where project root is
   found by walking up from current directory)
 
+**Note to Claude Code**: The binary is called `repo-to-md`, but the skill
+`review-to-md`. The binary is a general tool. The skill is designed to only
+handle PR reviews.
+
 ### Temporary files and exploration scripts
 
 Temporary files and exploration scripts should be placed in:
@@ -152,10 +155,10 @@ Do not commit exploration scripts or their output files. Add them to
 
 ### Project structure
 
-This is a Cargo workspace with a single member package `review-to-md/`:
+This is a Cargo workspace with a single member package `repo-to-md/`:
 
 ```
-review-to-md/src/
+repo-to-md/src/
 ├── lib.rs           - Public API surface, re-exports
 ├── main.rs          - CLI entry point, argument parsing, interactive review selection
 ├── client.rs        - GitHub GraphQL API client
@@ -356,13 +359,13 @@ complete documentation on creating and using skills:
 - **Global skills**: `~/.claude/skills/` - Available across all projects
 - **Project skills**: `.claude/skills/` - Shared with team, version controlled
 
-### review-to-md skill
+### repo-to-md skill
 
-The review-to-md skill is bundled with the binary and can be installed using:
+The repo-to-md skill is bundled with the binary and can be installed using:
 
 ```bash
-review-to-md install [--local]
+repo-to-md install [--local]
 ```
 
-The skill enables Claude Code to automatically use review-to-md when working
-with PR reviews.
+The skill enables Claude Code to automatically use repo-to-md when working with
+PR reviews.

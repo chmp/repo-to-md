@@ -1,5 +1,5 @@
 [package]
-name = "review-to-md"
+name = "repo-to-md"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ name = "review_to_md"
 path = "src/lib.rs"
 
 [[bin]]
-name = "review-to-md"
+name = "repo-to-md"
 path = "src/main.rs"
 
 [dependencies]

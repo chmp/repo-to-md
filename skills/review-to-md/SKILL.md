@@ -13,7 +13,7 @@ LLM-friendly markdown.
 Get the last review in GitHub by the current user for a PR in the git repository
 
 ```bash
-review-to-md review <PR_NUMBER> --author @me --review-index -1
+repo-to-md review <PR_NUMBER> --author @me --review-index -1
 ```
 
 The command can be executed anywhere in the repository. There is no need to
@@ -24,7 +24,7 @@ change the working directory.
 If the command fails, please note potential failure cases:
 
 - `gh` CLI must be installed and authenticated
-- `review-to-md` must be run from within a git repository with a configured
+- `repo-to-md` must be run from within a git repository with a configured
   remote
 
 The tool auto-detects the repository from `git remote get-url origin` and the
@@ -35,7 +35,7 @@ current user from the authentication used for the `gh` command.
 Get the last review by a specific user:
 
 ```bash
-review-to-md review <PR_NUMBER> --author <USERNAME> --review-index -1
+repo-to-md review <PR_NUMBER> --author <USERNAME> --review-index -1
 ```
 
 Presents a numbered menu to select from available reviews.
@@ -43,23 +43,23 @@ Presents a numbered menu to select from available reviews.
 **Filter by author** (interactive if multiple reviews):
 
 ```bash
-review-to-md review <PR_NUMBER> --author <USERNAME>
-review-to-md review <PR_NUMBER> --author @me  # The current user
+repo-to-md review <PR_NUMBER> --author <USERNAME>
+repo-to-md review <PR_NUMBER> --author @me  # The current user
 ```
 
 **By index** (1-indexed, -1 for last):
 
 ```bash
-review-to-md review <PR_NUMBER> --review-index -1
+repo-to-md review <PR_NUMBER> --review-index -1
 ```
 
 ## Non-recommended usage
 
-`review-to-md` supports selecting the review interactively, by omitting the
+`repo-to-md` supports selecting the review interactively, by omitting the
 corresponding arguments.
 
 ```bash
-review-to-md review <PR_NUMBER>
+repo-to-md review <PR_NUMBER>
 ```
 
 **Please avoid this usage.**

@@ -7,7 +7,7 @@ use std::io::{self, Write};
 const SKILL_CONTENT: &str = include_str!("../../skills/review-to-md/SKILL.md");
 
 #[derive(FromArgs)]
-/// review-to-md: Format GitHub PR comments as markdown
+/// repo-to-md: Format GitHub PR comments as markdown
 struct Cli {
     #[argh(subcommand)]
     command: Command,
@@ -55,7 +55,7 @@ struct ReviewCmd {
 
 #[derive(FromArgs)]
 #[argh(subcommand, name = "install")]
-/// Install the review-to-md skill for Claude Code
+/// Install the repo-to-md skill for Claude Code
 struct InstallSkillCmd {
     /// install to local project directory (finds project root via .git or .claude)
     #[argh(switch)]
@@ -127,13 +127,13 @@ fn install_skill(local: bool) -> Result<()> {
         // Local project installation - find project root
         let project_root = find_project_root()?;
         eprintln!("Found project root: {}", project_root.display());
-        project_root.join(".claude/skills/review-to-md")
+        project_root.join(".claude/skills/repo-to-md")
     } else {
         // Global installation in home directory
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .context("Could not determine home directory")?;
-        std::path::PathBuf::from(home).join(".claude/skills/review-to-md")
+        std::path::PathBuf::from(home).join(".claude/skills/repo-to-md")
     };
 
     // Create the directory
@@ -150,7 +150,7 @@ fn install_skill(local: bool) -> Result<()> {
     ))?;
 
     let location = if local { "local project" } else { "global" };
-    eprintln!("✓ Installed review-to-md skill to {} directory:", location);
+    eprintln!("✓ Installed repo-to-md skill to {} directory:", location);
     eprintln!("  {}", skill_dir.display());
 
     Ok(())
