@@ -53,6 +53,37 @@ mod diff_parsing {
 }
 
 #[cfg(test)]
+mod issue_formatting {
+    use crate::{client::Issue, formatting::format_issue_as_markdown};
+
+    fn test_issue_formatting(json: &str, expected: &str) {
+        let issue = serde_json::from_str::<Issue>(json).expect("Failed to parse JSON");
+        let output = format_issue_as_markdown(&issue);
+        assert_eq!(
+            output.trim(),
+            expected.trim(),
+            "Output mismatch:\n\nGot:\n{}\n\nExpected:\n{}",
+            output,
+            expected
+        );
+    }
+
+    #[test]
+    fn test_simple_issue() {
+        let json = include_str!("../../examples/simple_issue.json");
+        let expected = include_str!("../../examples/simple_issue.expected.md");
+        test_issue_formatting(json, expected);
+    }
+
+    #[test]
+    fn test_issue_no_body() {
+        let json = include_str!("../../examples/issue_no_body.json");
+        let expected = include_str!("../../examples/issue_no_body.expected.md");
+        test_issue_formatting(json, expected);
+    }
+}
+
+#[cfg(test)]
 mod integration {
     use crate::{
         cli::review::group_comments_by_file, client::Comment,

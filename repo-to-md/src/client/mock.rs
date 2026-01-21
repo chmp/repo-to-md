@@ -3,17 +3,21 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 
 use crate::client::{
-    Comment, FetchReviewCommentsClient, GetCurrentUserClient, ListReviewsClient, Review, User,
+    Comment, FetchIssueClient, FetchReviewCommentsClient, GetCurrentUserClient, Issue,
+    ListReviewsClient, Review, User,
 };
 
 // Mock GitHub client for testing
 pub struct MockGitHubClient {
     username: String,
-    /// reviewes keyed by (owner, repo, pr number)
+    /// reviews keyed by (owner, repo, pr number)
     reviews: HashMap<(String, String, u32), Vec<Review>>,
 
     /// comments keyed by review_id
     review_comments: HashMap<String, Vec<Comment>>,
+
+    /// issues keyed by (owner, repo, issue number)
+    issues: HashMap<(String, String, u32), Issue>,
 }
 
 impl MockGitHubClient {
@@ -22,6 +26,7 @@ impl MockGitHubClient {
             username: username.to_string(),
             reviews: Default::default(),
             review_comments: Default::default(),
+            issues: Default::default(),
         }
     }
 
@@ -46,6 +51,12 @@ impl MockGitHubClient {
     ) -> Self {
         self.review_comments
             .insert(review_id.to_string(), comments.to_vec());
+        self
+    }
+
+    pub fn with_issue(mut self, owner: &str, repo: &str, issue: Issue) -> Self {
+        self.issues
+            .insert((owner.to_string(), repo.to_string(), issue.number), issue);
         self
     }
 }
@@ -74,5 +85,15 @@ impl FetchReviewCommentsClient for MockGitHubClient {
             .get(review_id)
             .cloned()
             .ok_or_else(|| anyhow!("Could not find comments for review {review_id}"))
+    }
+}
+
+impl FetchIssueClient for MockGitHubClient {
+    fn fetch_issue(&self, owner: &str, repo: &str, issue_number: u32) -> Result<Issue> {
+        let key = (owner.to_string(), repo.to_string(), issue_number);
+        self.issues
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| anyhow!("Could not find issue {issue_number} for {owner}/{repo}"))
     }
 }

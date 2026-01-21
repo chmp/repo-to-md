@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 
 use crate::client::traits::{
-    Comment, FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient,
-    ListReviewsClient, Review, User,
+    Comment, FetchIssueClient, FetchReviewCommentsClient, GetCurrentUserClient, Issue, Label,
+    ListPullRequestsClient, ListReviewsClient, Review, User,
 };
 
 /// Real GitHub client using gh CLI
@@ -198,6 +198,60 @@ impl ListPullRequestsClient for GithubClient {
     }
 }
 
+impl FetchIssueClient for GithubClient {
+    fn fetch_issue(&self, owner: &str, repo: &str, issue_number: u32) -> Result<Issue> {
+        let query = r#"
+            query($owner: String!, $repo: String!, $issueNumber: Int!) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $issueNumber) {
+                  id
+                  number
+                  title
+                  body
+                  author { login }
+                  state
+                  createdAt
+                  labels(first: 20) { nodes { name } }
+                }
+              }
+            }
+        "#;
+
+        validate_github_owner(owner)?;
+        validate_github_repo(repo)?;
+
+        let issue_number_str = issue_number.to_string();
+        let variables = &[
+            ("owner", owner),
+            ("repo", repo),
+            ("issueNumber", issue_number_str.as_str()),
+        ];
+
+        let json = run_graphql_query(query, variables)?;
+
+        let response: GraphQLResponse<FetchIssueData> =
+            serde_json::from_str(&json).context("Failed to parse GraphQL response")?;
+
+        let issue_node = response.data.repository.issue.context("Issue not found")?;
+
+        Ok(Issue {
+            id: issue_node.id,
+            number: issue_node.number,
+            title: issue_node.title,
+            body: issue_node.body,
+            author: issue_node.author.map(|a| User { login: a.login }),
+            state: issue_node.state,
+            created_at: issue_node.created_at,
+            labels: issue_node
+                .labels
+                .nodes
+                .into_iter()
+                .map(|l| Label { name: l.name })
+                .collect(),
+        })
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ListPullRequestsData {
@@ -334,6 +388,40 @@ struct PullRequest {
 #[derive(Debug, Deserialize)]
 struct ReviewsConnection {
     nodes: Vec<Review>,
+}
+
+// Response structure for fetching issues
+#[derive(Debug, Deserialize)]
+struct FetchIssueData {
+    repository: IssueRepository,
+}
+
+#[derive(Debug, Deserialize)]
+struct IssueRepository {
+    issue: Option<IssueNode>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IssueNode {
+    id: String,
+    number: u32,
+    title: String,
+    body: Option<String>,
+    author: Option<GraphQLAuthor>,
+    state: String,
+    created_at: String,
+    labels: LabelConnection,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabelConnection {
+    nodes: Vec<LabelNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LabelNode {
+    name: String,
 }
 
 fn validate_github_owner(owner: &str) -> Result<()> {

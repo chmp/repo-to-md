@@ -1,4 +1,4 @@
-use crate::client::Comment;
+use crate::client::{Comment, Issue};
 /// Markdown formatting utilities for PR review comments.
 use crate::diff::{calculate_context_range, parse_diff_hunk_with_line_numbers};
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
@@ -168,4 +168,54 @@ fn output_comment(output: &mut String, comment: &Comment, prefix: &str, suffix: 
     }
 
     output.push_str(&format!("{} </review>{}\n", prefix, suffix));
+}
+
+/// Formats a GitHub issue as markdown.
+///
+/// Generates a markdown representation of an issue designed for LLM consumption,
+/// including title, state, author, creation date, labels, and description.
+///
+/// # Arguments
+///
+/// * `issue` - The issue to format
+///
+/// # Returns
+///
+/// A formatted markdown string
+pub fn format_issue_as_markdown(issue: &Issue) -> String {
+    let mut output = String::new();
+
+    // Title
+    output.push_str(&format!("# Issue #{}: {}\n\n", issue.number, issue.title));
+
+    // Metadata
+    output.push_str(&format!("**State:** {}\n", issue.state));
+
+    if let Some(author) = &issue.author {
+        output.push_str(&format!("**Author:** @{}\n", author.login));
+    }
+
+    output.push_str(&format!("**Created:** {}\n", issue.created_at));
+
+    if !issue.labels.is_empty() {
+        let label_names: Vec<&str> = issue.labels.iter().map(|l| l.name.as_str()).collect();
+        output.push_str(&format!("**Labels:** {}\n", label_names.join(", ")));
+    }
+
+    // Description
+    output.push_str("\n## Description\n\n");
+    if let Some(body) = &issue.body {
+        if !body.is_empty() {
+            output.push_str(body);
+            if !body.ends_with('\n') {
+                output.push('\n');
+            }
+        } else {
+            output.push_str("*No description provided.*\n");
+        }
+    } else {
+        output.push_str("*No description provided.*\n");
+    }
+
+    output
 }

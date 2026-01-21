@@ -1,4 +1,5 @@
 mod install_skill;
+mod issue;
 mod query;
 pub(crate) mod review;
 
@@ -6,6 +7,7 @@ use anyhow::Result;
 use argh::FromArgs;
 
 pub use install_skill::InstallSkillCommand;
+pub use issue::IssueCommand;
 pub use query::QueryCommand;
 pub use review::ReviewCommand;
 
@@ -22,6 +24,7 @@ pub struct Cli {
 #[argh(subcommand)]
 pub enum Command {
     Review(ReviewCommand),
+    Issue(IssueCommand),
     InstallSkill(InstallSkillCommand),
     Query(QueryCommand),
 }
@@ -30,6 +33,7 @@ impl Cli {
     pub fn run(self) -> Result<()> {
         match self.command {
             Command::Review(cmd) => cmd.run(&GithubClient, &LocalRepository),
+            Command::Issue(cmd) => cmd.run(&GithubClient, &LocalRepository),
             Command::InstallSkill(cmd) => cmd.run(),
             Command::Query(cmd) => cmd.run(&GithubClient),
         }
