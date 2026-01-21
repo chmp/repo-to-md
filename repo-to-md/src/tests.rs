@@ -1,30 +1,3 @@
-use super::*;
-
-mod url_parsing {
-    use super::*;
-
-    #[test]
-    fn test_parse_github_url_ssh() {
-        let url = "git@github.com:chmp/markdown-app.git";
-        let result = parse_github_url(url).unwrap();
-        assert_eq!(result, ("chmp".to_string(), "markdown-app".to_string()));
-    }
-
-    #[test]
-    fn test_parse_github_url_https() {
-        let url = "https://github.com/chmp/markdown-app.git";
-        let result = parse_github_url(url).unwrap();
-        assert_eq!(result, ("chmp".to_string(), "markdown-app".to_string()));
-    }
-
-    #[test]
-    fn test_parse_github_url_https_no_git() {
-        let url = "https://github.com/chmp/markdown-app";
-        let result = parse_github_url(url).unwrap();
-        assert_eq!(result, ("chmp".to_string(), "markdown-app".to_string()));
-    }
-}
-
 mod language_detection {
     use crate::language::detect_language;
 
@@ -50,71 +23,6 @@ mod comment_syntax {
         assert_eq!(get_comment_suffix("rust"), "");
         assert_eq!(get_comment_suffix("python"), "");
         assert_eq!(get_comment_suffix("markdown"), " -->");
-    }
-}
-
-mod validation {
-    use super::*;
-
-    #[test]
-    fn test_validate_github_owner_valid() {
-        assert!(validate_github_owner("octocat").is_ok());
-        assert!(validate_github_owner("github").is_ok());
-        assert!(validate_github_owner("my-org").is_ok());
-        assert!(validate_github_owner("user123").is_ok());
-        assert!(validate_github_owner("a").is_ok());
-        assert!(validate_github_owner("a-b").is_ok());
-    }
-
-    #[test]
-    fn test_validate_github_owner_invalid() {
-        // Empty string
-        assert!(validate_github_owner("").is_err());
-
-        // Too long (>39 characters)
-        assert!(validate_github_owner(&"a".repeat(40)).is_err());
-
-        // Starts with hyphen
-        assert!(validate_github_owner("-start").is_err());
-
-        // Ends with hyphen
-        assert!(validate_github_owner("end-").is_err());
-
-        // Consecutive hyphens
-        assert!(validate_github_owner("double--dash").is_err());
-
-        // Invalid characters
-        assert!(validate_github_owner("user@example").is_err());
-        assert!(validate_github_owner("user name").is_err());
-        assert!(validate_github_owner("user_name").is_err());
-        assert!(validate_github_owner("user.name").is_err());
-    }
-
-    #[test]
-    fn test_validate_github_repo_valid() {
-        assert!(validate_github_repo("hello-world").is_ok());
-        assert!(validate_github_repo("my_repo").is_ok());
-        assert!(validate_github_repo("repo.name").is_ok());
-        assert!(validate_github_repo("test-123_abc.xyz").is_ok());
-        assert!(validate_github_repo("a").is_ok());
-        assert!(validate_github_repo("123").is_ok());
-    }
-
-    #[test]
-    fn test_validate_github_repo_invalid() {
-        // Empty string
-        assert!(validate_github_repo("").is_err());
-
-        // Too long (>100 characters)
-        assert!(validate_github_repo(&"a".repeat(101)).is_err());
-
-        // Starts with dot
-        assert!(validate_github_repo(".dotfile").is_err());
-
-        // Invalid characters
-        assert!(validate_github_repo("repo with spaces").is_err());
-        assert!(validate_github_repo("repo@test").is_err());
-        assert!(validate_github_repo("repo#test").is_err());
     }
 }
 
@@ -144,11 +52,15 @@ mod diff_parsing {
     }
 }
 
+#[cfg(test)]
 mod integration {
-    use super::*;
+    use crate::{
+        cli::review::group_comments_by_file, client::Comment,
+        formatting::format_comments_as_markdown,
+    };
 
     fn test_formatting(json: &str, expected: &str) {
-        let comments = parse_comments_json(json).expect("Failed to parse JSON");
+        let comments = serde_json::from_str::<Vec<Comment>>(json).expect("Failed to parse JSON");
         let grouped = group_comments_by_file(comments);
         let output = format_comments_as_markdown(grouped);
         assert_eq!(

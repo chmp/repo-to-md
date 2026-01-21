@@ -1,0 +1,136 @@
+use std::process::Command;
+
+use anyhow::{bail, Context, Result};
+
+/// Retrieves the GitHub owner and repository name from the git remote URL.
+///
+/// Executes `git remote get-url origin` to get the remote URL, then parses it
+/// to extract the owner and repository name.
+///
+/// # Returns
+///
+/// A tuple of `(owner, repo)` on success.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The git command fails to execute
+/// - The git remote is not configured
+/// - The remote URL is not a valid GitHub URL
+pub trait GetRepoistoryInfo {
+    fn get_github_owner_and_repo(&self) -> Result<(String, String)>;
+}
+
+pub trait GetCurrentBranch {
+    fn get_upstream_branch(&self) -> Result<String>;
+}
+
+pub struct LocalRepository;
+
+impl GetRepoistoryInfo for LocalRepository {
+    fn get_github_owner_and_repo(&self) -> Result<(String, String)> {
+        let output = Command::new("git")
+            .args(["remote", "get-url", "origin"])
+            .output()
+            .context("Failed to execute git command")?;
+
+        if !output.status.success() {
+            anyhow::bail!("Git remote not configured");
+        }
+
+        let url = str::from_utf8(&output.stdout)
+            .context("Invalid UTF-8 in git remote URL")?
+            .trim()
+            .to_string();
+
+        parse_github_url(&url)
+    }
+}
+
+impl GetCurrentBranch for LocalRepository {
+    fn get_upstream_branch(&self) -> Result<String> {
+        let output = Command::new("git")
+            .args(["rev-parse", "--abbrev-ref", "@{upstream}"])
+            .output()
+            .context("Failed to execute git command")?;
+
+        if !output.status.success() {
+            anyhow::bail!(
+                "Could not determine upstream branch: {}",
+                std::str::from_utf8(&output.stderr).unwrap_or("<invalid UTF8 in stderr>"),
+            );
+        }
+
+        let upstream = str::from_utf8(&output.stdout)
+            .context("Invalid UTF-8 in upstream branch")?
+            .trim()
+            .to_string();
+
+        if upstream.is_empty() {
+            bail!("Could not determine upstream branch: empty result");
+        }
+
+        Ok(upstream)
+    }
+}
+
+/// Parses a GitHub URL to extract the owner and repository name.
+///
+/// Supports both SSH and HTTPS GitHub URLs:
+/// - SSH: `git@github.com:owner/repo.git`
+/// - HTTPS: `https://github.com/owner/repo.git`
+///
+/// # Arguments
+///
+/// * `url` - The GitHub URL to parse
+///
+/// # Returns
+///
+/// A tuple of `(owner, repo)` on success.
+///
+/// # Errors
+///
+/// Returns an error if the URL is not a valid GitHub URL format.
+pub(crate) fn parse_github_url(url: &str) -> Result<(String, String)> {
+    if let Some(ssh_match) = url.strip_prefix("git@github.com:") {
+        let parts: Vec<&str> = ssh_match.trim_end_matches(".git").split('/').collect();
+        if parts.len() == 2 {
+            return Ok((parts[0].to_string(), parts[1].to_string()));
+        }
+    }
+
+    if let Some(https_match) = url.strip_prefix("https://github.com/") {
+        let parts: Vec<&str> = https_match.trim_end_matches(".git").split('/').collect();
+        if parts.len() == 2 {
+            return Ok((parts[0].to_string(), parts[1].to_string()));
+        }
+    }
+
+    bail!("Could not parse GitHub URL: {}", url)
+}
+
+#[cfg(test)]
+mod url_parsing {
+    use super::parse_github_url;
+
+    #[test]
+    fn test_parse_github_url_ssh() {
+        let url = "git@github.com:foo/bar-baz.git";
+        let result = parse_github_url(url).unwrap();
+        assert_eq!(result, ("foo".to_string(), "bar-baz".to_string()));
+    }
+
+    #[test]
+    fn test_parse_github_url_https() {
+        let url = "https://github.com/foo/bar-baz.git";
+        let result = parse_github_url(url).unwrap();
+        assert_eq!(result, ("foo".to_string(), "bar-baz".to_string()));
+    }
+
+    #[test]
+    fn test_parse_github_url_https_no_git() {
+        let url = "https://github.com/foo/bar-baz";
+        let result = parse_github_url(url).unwrap();
+        assert_eq!(result, ("foo".to_string(), "bar-baz".to_string()));
+    }
+}
