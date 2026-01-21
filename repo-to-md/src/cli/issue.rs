@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use anyhow::{bail, Context, Result};
 use argh::FromArgs;
 
@@ -23,6 +25,7 @@ impl IssueCommand {
         self,
         client: &impl FetchIssueClient,
         repository: &impl GetRepoistoryInfo,
+        writer: &mut impl Write,
     ) -> Result<()> {
         let (owner, repo) = self.get_owner_and_repo(repository)?;
 
@@ -33,7 +36,7 @@ impl IssueCommand {
 
         let issue = client.fetch_issue(&owner, &repo, self.issue_number)?;
         let markdown = format_issue_as_markdown(&issue);
-        print!("{}", markdown);
+        write!(writer, "{}", markdown)?;
 
         Ok(())
     }

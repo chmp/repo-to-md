@@ -31,9 +31,10 @@ pub enum Command {
 
 impl Cli {
     pub fn run(self) -> Result<()> {
+        let mut stdout = std::io::stdout();
         match self.command {
-            Command::Review(cmd) => cmd.run(&GithubClient, &LocalRepository),
-            Command::Issue(cmd) => cmd.run(&GithubClient, &LocalRepository),
+            Command::Review(cmd) => cmd.run(&GithubClient, &LocalRepository, &mut stdout),
+            Command::Issue(cmd) => cmd.run(&GithubClient, &LocalRepository, &mut stdout),
             Command::InstallSkill(cmd) => cmd.run(),
             Command::Query(cmd) => cmd.run(&GithubClient),
         }

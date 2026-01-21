@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 
 use crate::client::{
     Comment, FetchIssueClient, FetchReviewCommentsClient, GetCurrentUserClient, Issue,
-    ListReviewsClient, Review, User,
+    ListPullRequestsClient, ListReviewsClient, PullRequest, Review, User,
 };
 
 // Mock GitHub client for testing
@@ -18,6 +18,9 @@ pub struct MockGitHubClient {
 
     /// issues keyed by (owner, repo, issue number)
     issues: HashMap<(String, String, u32), Issue>,
+
+    /// pull requests keyed by (owner, repo)
+    pull_requests: HashMap<(String, String), Vec<PullRequest>>,
 }
 
 impl MockGitHubClient {
@@ -27,6 +30,7 @@ impl MockGitHubClient {
             reviews: Default::default(),
             review_comments: Default::default(),
             issues: Default::default(),
+            pull_requests: Default::default(),
         }
     }
 
@@ -57,6 +61,19 @@ impl MockGitHubClient {
     pub fn with_issue(mut self, owner: &str, repo: &str, issue: Issue) -> Self {
         self.issues
             .insert((owner.to_string(), repo.to_string(), issue.number), issue);
+        self
+    }
+
+    pub fn with_pull_requests<const N: usize>(
+        mut self,
+        owner: &str,
+        repo: &str,
+        pull_requests: [PullRequest; N],
+    ) -> Self {
+        self.pull_requests.insert(
+            (owner.to_string(), repo.to_string()),
+            pull_requests.to_vec(),
+        );
         self
     }
 }
@@ -95,5 +112,15 @@ impl FetchIssueClient for MockGitHubClient {
             .get(&key)
             .cloned()
             .ok_or_else(|| anyhow!("Could not find issue {issue_number} for {owner}/{repo}"))
+    }
+}
+
+impl ListPullRequestsClient for MockGitHubClient {
+    fn list_pull_requests(&self, owner: &str, repo: &str) -> Result<Vec<PullRequest>> {
+        let key = (owner.to_string(), repo.to_string());
+        self.pull_requests
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| anyhow!("Could not find pull requests for {owner}/{repo}"))
     }
 }

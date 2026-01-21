@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Write;
 
 use anyhow::{bail, Context, Result};
 use argh::FromArgs;
@@ -58,6 +59,7 @@ impl ReviewCommand {
               + FetchReviewCommentsClient
               + ListPullRequestsClient),
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch),
+        writer: &mut impl Write,
     ) -> Result<()> {
         let review_id = self.get_review_id(client, repository)?;
         let comments = client.fetch_review_comments(&review_id)?;
@@ -69,7 +71,7 @@ impl ReviewCommand {
 
         let grouped_comments = group_comments_by_file(comments);
         let markdown = format_comments_as_markdown(grouped_comments);
-        print!("{}", markdown);
+        write!(writer, "{}", markdown)?;
 
         Ok(())
     }

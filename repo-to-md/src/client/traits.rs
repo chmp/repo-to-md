@@ -68,7 +68,7 @@ pub struct User {
     pub login: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequest {
     pub id: String,
