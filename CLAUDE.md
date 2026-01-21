@@ -85,31 +85,32 @@ Binary location: `target/release/repo-to-md` (or `repo-to-md.exe` on Windows)
 Fetch comments with interactive review selection:
 
 ```bash
-cargo run -- review <PR_NUMBER>
-cargo run -- review <PR_NUMBER> --owner <OWNER> --repo <REPO>
+cargo run -- review --pr <PR_NUMBER>
+cargo run -- review --pr <PR_NUMBER> --repo <OWNER/REPO>
 ```
 
 Fetch comments from a specific review (skip interactive selection):
 
 ```bash
-cargo run -- review <PR_NUMBER> --review-id <REVIEW_ID>
-cargo run -- review <PR_NUMBER> --review-index 1
-cargo run -- review <PR_NUMBER> --review-index -1
+cargo run -- review --pr <PR_NUMBER> --review <REVIEW_ID>
+cargo run -- review --pr <PR_NUMBER> --review 1
+cargo run -- review --pr <PR_NUMBER> --review -1
 ```
 
 Filter reviews by author:
 
 ```bash
-cargo run -- review <PR_NUMBER> --author <USERNAME>
-cargo run -- review <PR_NUMBER> --author <USERNAME> --review-index -1
-cargo run -- review <PR_NUMBER> --author @me
-cargo run -- review <PR_NUMBER> --author @me --review-index -1
+cargo run -- review --pr <PR_NUMBER> --author <USERNAME>
+cargo run -- review --pr <PR_NUMBER> --author <USERNAME> --review -1
+cargo run -- review --pr <PR_NUMBER> --author @me
+cargo run -- review --pr <PR_NUMBER> --author @me --review -1
 ```
 
-Read from JSON file:
+Fetch issues:
 
 ```bash
-cargo run -- review --json-file examples/simple_comment.json
+cargo run -- issue <ISSUE_NUMBER>
+cargo run -- issue <ISSUE_NUMBER> --repo <OWNER/REPO>
 ```
 
 ### Install skill
@@ -159,23 +160,40 @@ This is a Cargo workspace with a single member package `repo-to-md/`:
 
 ```
 repo-to-md/src/
-├── lib.rs           - Public API surface, re-exports
-├── main.rs          - CLI entry point, argument parsing, interactive review selection
-├── client.rs        - GitHub GraphQL API client
-├── formatting.rs    - Markdown formatting logic
-├── diff.rs          - Diff parsing utilities
-├── language.rs      - Language detection and comment syntax
-└── tests.rs         - Test suite
+├── lib.rs              - Public API surface, re-exports
+├── main.rs             - CLI entry point
+├── cli/                - CLI command implementations
+│   ├── mod.rs          - CLI struct, command dispatch
+│   ├── review.rs       - Review command (fetch PR review comments)
+│   ├── issue.rs        - Issue command (fetch GitHub issues)
+│   ├── install_skill.rs - Skill installation command
+│   └── query.rs        - Query command
+├── client/             - GitHub API client
+│   ├── mod.rs          - Module exports
+│   ├── github.rs       - GitHub GraphQL API implementation
+│   ├── mock.rs         - Mock client for testing
+│   └── traits.rs       - Client traits and data types
+├── repository.rs       - Git repository utilities and MockRepository
+├── formatting.rs       - Markdown formatting logic
+├── diff.rs             - Diff parsing utilities
+├── language.rs         - Language detection and comment syntax
+└── tests.rs            - Test suite
 
-examples/            - Test fixtures with JSON inputs and expected markdown outputs
+examples/               - Test fixtures with JSON inputs and expected markdown outputs
 ```
 
 **Module responsibilities:**
 
-- **main.rs** - CLI interface, handles `--review-id` option and interactive
-  review selection
-- **client.rs** - GraphQL queries via `gh` CLI, fetches reviews and comments
-- **formatting.rs** - Transforms comments into markdown with inline code blocks
+- **main.rs** - Entry point, invokes CLI from lib
+- **cli/** - Command implementations using argh for argument parsing
+  - **review.rs** - Handles `--review`, `--author`, `--pr` options
+  - **issue.rs** - Fetches and formats GitHub issues
+- **client/** - GitHub API abstraction with trait-based design for testability
+  - **github.rs** - Real implementation using `gh` CLI
+  - **mock.rs** - MockGitHubClient for testing
+  - **traits.rs** - Shared types (Review, Comment, Issue, PullRequest, etc.)
+- **repository.rs** - Git operations (get remote URL, branch), MockRepository
+- **formatting.rs** - Transforms comments/issues into markdown
 - **diff.rs** - Parses unified diffs, extracts line numbers, handles truncation
 - **language.rs** - Detects languages from file extensions, provides comment
   syntax
@@ -197,21 +215,21 @@ examples/            - Test fixtures with JSON inputs and expected markdown outp
 4. Group comments by file path
 5. Format as markdown code blocks with inline comments
 
-**GitHub GraphQL API (client.rs):**
+**GitHub GraphQL API (client/):**
 
-- `list_reviews()` - Fetches all reviews for a PR with metadata (ID, author,
-  state, body, created date, comment count)
-- `fetch_review_comments()` - Fetches all comments from a specific review by ID
-- GraphQL queries via `gh api graphql` command
-- Returns `Review` and `Comment` structs
-- Includes `isMinimized` field (fetched but not used yet)
-- `GitHubClient` trait - Abstracts GitHub API operations for testing
-- `GhClient` - Implements GitHubClient using gh CLI. The `get_current_user()`
-  method fetches the authenticated user's login via the `viewer` query, used to
-  resolve `--author @me`.
+- **Traits** (traits.rs):
+  - `GetCurrentUserClient` - Get authenticated user
+  - `ListReviewsClient` - List PR reviews
+  - `FetchReviewCommentsClient` - Fetch comments from a review
+  - `ListPullRequestsClient` - List open pull requests
+  - `FetchIssueClient` - Fetch a single issue
+- **Data types** (traits.rs): `Review`, `Comment`, `Issue`, `PullRequest`, `User`
+- **GithubClient** (github.rs) - Real implementation using `gh api graphql`
+- **MockGitHubClient** (mock.rs) - Test double with builder pattern:
+  - `with_reviews()`, `with_comments()`, `with_issue()`, `with_pull_requests()`
 - **Security**: GraphQL queries use parameterized variables (passed via `gh -F`
   flags), not string interpolation. The `gh` CLI handles escaping and injection
-  prevention. Variables are never interpolated directly into the query string.
+  prevention.
 
 **GitHub GraphQL API Documentation:**
 
@@ -277,12 +295,24 @@ output.
 cargo test
 ```
 
-**Module-specific tests:**
+**Test modules:**
 
 - `tests::language_detection` - Language detection from file extensions
 - `tests::comment_syntax` - Comment prefix/suffix for different languages
 - `tests::diff_parsing` - Diff hunk parsing and code extraction
-- `tests::integration` - End-to-end formatting tests with example files
+- `tests::issue_formatting` - Issue formatting tests with example files
+- `tests::integration` - Review comment formatting tests with example files
+- `tests::cli_end_to_end` - End-to-end CLI tests using MockGitHubClient and
+  MockRepository. Tests the full command flow including:
+  - Review command with various options (--pr, --review, --author, @me)
+  - Issue command with repo auto-detection
+  - PR auto-detection from current branch
+
+**Testing approach:**
+
+- Use `MockGitHubClient` and `MockRepository` for isolated CLI tests
+- Commands provide `run_with_writer()` method to capture output for testing
+- Test main output (stdout) but not user-directed logs (eprintln)
 
 ## Code organization guidelines
 
