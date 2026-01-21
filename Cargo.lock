@@ -71,7 +71,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "review-to-md"
+name = "repo-to-md"
 version = "0.1.0"
 dependencies = [
  "anyhow",

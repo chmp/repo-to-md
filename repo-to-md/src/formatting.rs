@@ -1,37 +1,8 @@
+use crate::client::Comment;
 /// Markdown formatting utilities for PR review comments.
 use crate::diff::{calculate_context_range, parse_diff_hunk_with_line_numbers};
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
-use crate::Comment;
 use std::collections::HashMap;
-
-/// Outputs a comment with language-specific comment syntax.
-///
-/// Formats a comment with the appropriate prefix/suffix for the language,
-/// wrapping it in `<review user="...">` XML tags.
-///
-/// # Arguments
-///
-/// * `output` - The string to append the formatted comment to
-/// * `comment` - The comment to format
-/// * `prefix` - Language-specific comment prefix (e.g., "//" or "#")
-/// * `suffix` - Language-specific comment suffix (e.g., " -->" for HTML)
-fn output_comment(output: &mut String, comment: &Comment, prefix: &str, suffix: &str) {
-    output.push_str(&format!(
-        "{} <review user=\"{}\">\n",
-        prefix, comment.user.login
-    ));
-
-    // Handle multi-line comments: each line gets the prefix
-    for line in comment.body.lines() {
-        if line.is_empty() {
-            output.push_str(&format!("{}\n", prefix));
-        } else {
-            output.push_str(&format!("{} {}\n", prefix, line));
-        }
-    }
-
-    output.push_str(&format!("{} </review>{}\n", prefix, suffix));
-}
 
 /// Formats grouped PR review comments as markdown with inline code blocks.
 ///
@@ -168,4 +139,33 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
     }
 
     output
+}
+
+/// Outputs a comment with language-specific comment syntax.
+///
+/// Formats a comment with the appropriate prefix/suffix for the language,
+/// wrapping it in `<review user="...">` XML tags.
+///
+/// # Arguments
+///
+/// * `output` - The string to append the formatted comment to
+/// * `comment` - The comment to format
+/// * `prefix` - Language-specific comment prefix (e.g., "//" or "#")
+/// * `suffix` - Language-specific comment suffix (e.g., " -->" for HTML)
+fn output_comment(output: &mut String, comment: &Comment, prefix: &str, suffix: &str) {
+    output.push_str(&format!(
+        "{} <review user=\"{}\">\n",
+        prefix, comment.user.login
+    ));
+
+    // Handle multi-line comments: each line gets the prefix
+    for line in comment.body.lines() {
+        if line.is_empty() {
+            output.push_str(&format!("{}\n", prefix));
+        } else {
+            output.push_str(&format!("{} {}\n", prefix, line));
+        }
+    }
+
+    output.push_str(&format!("{} </review>{}\n", prefix, suffix));
 }

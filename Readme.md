@@ -1,8 +1,8 @@
-# `review-to-md`
+# `repo-to-md`
 
 Format GitHub pull request comments as markdown for LLM consumption.
 
-`review-to-md` fetches PR review comments from GitHub using the `gh` CLI and
+`repo-to-md` fetches PR review comments from GitHub using the `gh` CLI and
 formats them as markdown code blocks with inline comments. This makes it easy to
 provide PR review context to LLMs for addressing feedback.
 
@@ -17,20 +17,20 @@ Prerequisites:
 To format the comments for pull request 78, use
 
 ```bash
-review-to-md review 78
+repo-to-md review 78
 ```
 
 This commands auto-detects the repository from git remote, if it configured. To
 specify owner and repository explicitly, use:
 
 ```bash
-review-to-md review <PR_NUMBER> --owner <OWNER> --repo <REPO>
+repo-to-md review <PR_NUMBER> --owner <OWNER> --repo <REPO>
 ```
 
 Example:
 
 ```bash
-review-to-md review 78 --owner chmp --repo review-to-md
+repo-to-md review 78 --owner chmp --repo repo-to-md
 ```
 
 ### Skill installation
@@ -39,10 +39,10 @@ Install the Claude Code skill:
 
 ```bash
 # Install globally (available in all projects)
-review-to-md install
+repo-to-md install
 
 # Install locally (project-specific, finds project root via .git or .claude)
-review-to-md install --local
+repo-to-md install --local
 ```
 
 The skill will be installed to:
@@ -61,27 +61,27 @@ process. Alternative selection methods:
 **Direct review ID**:
 
 ```bash
-review-to-md review 78 --review-id PRR_kwDOAbcdef123456
+repo-to-md review 78 --review-id PRR_kwDOAbcdef123456
 ```
 
 **By index** (1-indexed, -1 for last review):
 
 ```bash
-review-to-md review 78 --review-index 1     # First review
-review-to-md review 78 --review-index -1    # Last review
+repo-to-md review 78 --review-index 1     # First review
+repo-to-md review 78 --review-index -1    # Last review
 ```
 
 **Filter by author**:
 
 ```bash
-review-to-md review 78 --author username    # Select from reviews by 'username'
-review-to-md review 78 --author @me         # Select from your own reviews
+repo-to-md review 78 --author username    # Select from reviews by 'username'
+repo-to-md review 78 --author @me         # Select from your own reviews
 ```
 
 **Combine filters**:
 
 ```bash
-review-to-md review 78 --author username --review-index -1  # Last review by 'username'
+repo-to-md review 78 --author username --review-index -1  # Last review by 'username'
 ```
 
 If `--author` filters to exactly one review, it will be auto-selected (no
@@ -90,7 +90,7 @@ interactive prompt).
 **From JSON file** (for testing/offline use):
 
 ```bash
-review-to-md review --json-file examples/simple_comment.json
+repo-to-md review --json-file examples/simple_comment.json
 ```
 
 ## Output format
