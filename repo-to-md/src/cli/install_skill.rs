@@ -1,8 +1,17 @@
 use anyhow::{Context, Result};
 use argh::FromArgs;
 
-// Embedded skill file for installation
-const SKILL_CONTENT: &str = include_str!("../../../skills/review-to-md/SKILL.md");
+// Embedded skill files for installation
+const SKILLS: &[(&str, &str)] = &[
+    (
+        "review-to-md",
+        include_str!("../../../skills/review-to-md/SKILL.md"),
+    ),
+    (
+        "issue-to-md",
+        include_str!("../../../skills/issue-to-md/SKILL.md"),
+    ),
+];
 
 #[derive(FromArgs)]
 #[argh(subcommand, name = "install")]
@@ -32,39 +41,42 @@ impl InstallSkillCommand {
     /// - Directory creation fails
     /// - File write fails
     pub fn run(self) -> Result<()> {
-        let skill_dir = if self.local {
+        let base_dir = if self.local {
             // Local project installation - find project root
             let project_root = find_project_root()?;
             eprintln!("Found project root: {}", project_root.display());
-            project_root.join(".claude/skills/repo-to-md")
+            project_root.join(".claude/skills")
         } else {
             // Global installation in home directory
             let home = std::env::var("HOME")
                 .or_else(|_| std::env::var("USERPROFILE"))
                 .context("Could not determine home directory")?;
-            std::path::PathBuf::from(home).join(".claude/skills/repo-to-md")
+            std::path::PathBuf::from(home).join(".claude/skills")
         };
 
-        // Create the directory
-        std::fs::create_dir_all(&skill_dir).context(format!(
-            "Failed to create directory: {}",
-            skill_dir.display()
-        ))?;
-
-        // Write the skill file
-        let skill_file = skill_dir.join("SKILL.md");
-        std::fs::write(&skill_file, SKILL_CONTENT).context(format!(
-            "Failed to write skill file: {}",
-            skill_file.display()
-        ))?;
+        let mut installation_directories = Vec::new();
+        for (skill_name, content) in SKILLS {
+            let skill_dir = base_dir.join(skill_name);
+            std::fs::create_dir_all(&skill_dir).context(format!(
+                "Failed to create directory: {}",
+                skill_dir.display()
+            ))?;
+            std::fs::write(skill_dir.join("SKILL.md"), content).context(format!(
+                "Failed to write skill file: {}",
+                skill_dir.display()
+            ))?;
+            installation_directories.push(skill_dir);
+        }
 
         let location = if self.local {
             "local project"
         } else {
             "global"
         };
-        eprintln!("✓ Installed repo-to-md skill to {} directory:", location);
-        eprintln!("  {}", skill_dir.display());
+        eprintln!("✓ Installed skills to {} directory:", location);
+        for dir in installation_directories {
+            eprintln!("  {}", dir.display());
+        }
 
         Ok(())
     }

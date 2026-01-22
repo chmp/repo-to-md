@@ -2,6 +2,35 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
+/// Mock repository for testing
+pub struct MockRepository {
+    owner: String,
+    repo: String,
+    upstream_branch: String,
+}
+
+impl MockRepository {
+    pub fn new(owner: &str, repo: &str, upstream_branch: &str) -> Self {
+        Self {
+            owner: owner.to_string(),
+            repo: repo.to_string(),
+            upstream_branch: upstream_branch.to_string(),
+        }
+    }
+}
+
+impl GetRepoistoryInfo for MockRepository {
+    fn get_github_owner_and_repo(&self) -> Result<(String, String)> {
+        Ok((self.owner.clone(), self.repo.clone()))
+    }
+}
+
+impl GetCurrentBranch for MockRepository {
+    fn get_upstream_branch(&self) -> Result<String> {
+        Ok(self.upstream_branch.clone())
+    }
+}
+
 /// Retrieves the GitHub owner and repository name from the git remote URL.
 ///
 /// Executes `git remote get-url origin` to get the remote URL, then parses it

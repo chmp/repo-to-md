@@ -1,10 +1,21 @@
 # `repo-to-md`
 
-Format GitHub pull request comments as markdown for LLM consumption.
+Format GitHub pull request reviews and issues as markdown for LLM consumption.
 
-`repo-to-md` fetches PR review comments from GitHub using the `gh` CLI and
-formats them as markdown code blocks with inline comments. This makes it easy to
-provide PR review context to LLMs for addressing feedback.
+`repo-to-md` fetches PR review comments and issues from GitHub using the `gh`
+CLI and formats them as markdown. Review comments are rendered as code blocks
+with inline comments, while issues include their description and conversation
+thread. This makes it easy to provide GitHub context to LLMs for addressing
+feedback or implementing features.
+
+## Installation
+
+The create is currently not published. To install the tool, checkout the
+repository and run
+
+```bash
+cargo install --path ./repo-to-md
+```
 
 ## Usage
 
@@ -33,9 +44,28 @@ Example:
 repo-to-md review 78 --owner chmp --repo repo-to-md
 ```
 
-### Skill installation
+### Claude Code skills
 
-Install the Claude Code skill:
+This tool includes two Claude Code skills that enable natural language
+interaction with GitHub reviews and issues.
+
+**review-to-md** fetches and formats PR review comments. Claude Code will use
+this skill when you ask it to address review feedback. Example prompts that
+trigger this skill:
+
+- "Please address my last review on GitHub"
+- "Implement the feedback from my PR review"
+- "Fix the issues mentioned in the code review"
+
+**issue-to-md** fetches and formats GitHub issues. Claude Code will use this
+skill when you ask it to work on an issue. Example prompts that trigger this
+skill:
+
+- "Please implement issue 67"
+- "What does GitHub issue #42 say?"
+- "Help me implement the feature described in issue 123"
+
+To install the skills, run:
 
 ```bash
 # Install globally (available in all projects)
@@ -45,94 +75,64 @@ repo-to-md install
 repo-to-md install --local
 ```
 
-The skill will be installed to:
-
-- Global: `~/.claude/skills/review-to-md/`
-- Local: `<project-root>/.claude/skills/review-to-md/`
-
-Once installed, Claude Code will automatically use this skill when working with
-PR reviews.
+Skills are installed to `~/.claude/skills/review-to-md/` (global) or
+`<project-root>/.claude/skills/review-to-md/` (local).
 
 ### Review selection options
 
-By default, the tool presents an interactive menu to select which review to
-process. Alternative selection methods:
-
-**Direct review ID**:
+Per default the PR matching the current branch is selected, to explicitly select
+a review, use
 
 ```bash
-repo-to-md review 78 --review-id PRR_kwDOAbcdef123456
+repo-to-md review --pr 78
 ```
 
-**By index** (1-indexed, -1 for last review):
+Per default the last review on a PR is selected, to explicitly select a review
+either by ID or by index, use
 
 ```bash
-repo-to-md review 78 --review-index 1     # First review
-repo-to-md review 78 --review-index -1    # Last review
+repo-to-md review --review PRR_kwDOAbcdef123456 # Fixed id
+repo-to-md review --review 1                    # First review
+repo-to-md review --review -1                   # Last review
 ```
 
-**Filter by author**:
+Per default the reviews considered when selecting by index are filterted by the
+current user, to select reviews by another user use
 
 ```bash
-repo-to-md review 78 --author username    # Select from reviews by 'username'
-repo-to-md review 78 --author @me         # Select from your own reviews
+repo-to-md review --author username    # Select from reviews by 'username'
+repo-to-md review --author @me         # Select from your own reviews
 ```
 
-**Combine filters**:
+Per default the GitHub repository for the `origin` remote is used, to overwrite
+the repo, use
 
 ```bash
-repo-to-md review 78 --author username --review-index -1  # Last review by 'username'
+repo-to-md review --repo owner/repo
 ```
 
-If `--author` filters to exactly one review, it will be auto-selected (no
-interactive prompt).
-
-**From JSON file** (for testing/offline use):
+Note that, when specifying a review id directly, other review filters are
+ignored. All filters can be combined, for example
 
 ```bash
-repo-to-md review --json-file examples/simple_comment.json
+repo-to-md review --pr 78 --author username --review-index -1  # Last review by 'username' on pr 78
 ```
 
-## Output format
+### Fetching issues
 
-The tool generates markdown with a header, file sections, and code blocks with
-inline review comments:
+Fetch and format a GitHub issue:
 
-````markdown
-# Pull Request Review Comments
-
-Please address the following review comments:
-
-## `path/to/file.rs` - Lines 10-15
-
-```rust
-pub struct Config {
-    pub field: String,
-// <review user="reviewer">
-// This should be renamed to...
-// </review>
-}
+```bash
+repo-to-md issue 42
+repo-to-md issue 42 --repo owner/repo
 ```
-````
 
-Each file section includes:
-
-- A markdown heading with the file path in backticks and line range
-- Code context from the diff hunk with syntax highlighting
-- Review comments embedded as `<review user="...">...</review>` XML tags
-- Language-specific comment prefixes (e.g., `//` for Rust, `#` for Python)
+The repository is auto-detected from the `origin` remote when not specified.
 
 ## How it works
 
-1. Detects repository owner and name from `git remote get-url origin` (or uses
-   provided arguments)
-2. Fetches available reviews for the PR using GitHub GraphQL API via
-   `gh api graphql`
-3. Selects a specific review either:
-   - Interactively via numbered menu (default)
-   - By review ID using `--review-id`
-   - By index using `--review-index` (optionally filtered by `--author`)
-4. Fetches all comments from the selected review via GraphQL
-5. Groups comments by file and diff hunk
-6. Formats the review as markdown with code blocks that embed review comments as
-   code comments
+This tool uses the GitHub cli `gh` and the Git cli `git` for the following
+operations
+
+- `git`: read the configured remotes and the current branch
+- `gh`: perform GraphQL queries using `gh api graphql`

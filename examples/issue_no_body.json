@@ -1,0 +1,10 @@
+{
+  "id": "I_456",
+  "number": 99,
+  "title": "Bug: Application crashes on startup",
+  "body": null,
+  "author": {"login": "bugfinder"},
+  "state": "CLOSED",
+  "createdAt": "2024-02-20T14:45:00Z",
+  "labels": [{"name": "bug"}]
+}

@@ -8,6 +8,6 @@ mod traits;
 pub use github::GithubClient;
 pub use mock::MockGitHubClient;
 pub use traits::{
-    Comment, CommentCount, FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient,
-    ListReviewsClient, PullRequest, Review, User,
+    Comment, CommentCount, FetchIssueClient, FetchReviewCommentsClient, GetCurrentUserClient,
+    Issue, Label, ListPullRequestsClient, ListReviewsClient, PullRequest, Review, User,
 };

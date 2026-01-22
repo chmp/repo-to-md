@@ -68,11 +68,45 @@ pub struct User {
     pub login: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequest {
     pub id: String,
     pub number: u32,
     pub title: String,
     pub head_ref_name: String,
+}
+
+/// A GitHub issue.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Issue {
+    /// The GitHub node ID of the issue
+    pub id: String,
+    /// The issue number
+    pub number: u32,
+    /// The issue title
+    pub title: String,
+    /// The issue body/description (can be null)
+    pub body: Option<String>,
+    /// The author of the issue (can be null if user was deleted)
+    pub author: Option<User>,
+    /// The state of the issue (OPEN, CLOSED)
+    pub state: String,
+    /// When the issue was created
+    pub created_at: String,
+    /// Labels applied to the issue
+    #[serde(default)]
+    pub labels: Vec<Label>,
+}
+
+/// A GitHub label.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Label {
+    /// The label name
+    pub name: String,
+}
+
+pub trait FetchIssueClient {
+    fn fetch_issue(&self, owner: &str, repo: &str, issue_number: u32) -> Result<Issue>;
 }

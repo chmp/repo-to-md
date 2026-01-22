@@ -3,17 +3,24 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 
 use crate::client::{
-    Comment, FetchReviewCommentsClient, GetCurrentUserClient, ListReviewsClient, Review, User,
+    Comment, FetchIssueClient, FetchReviewCommentsClient, GetCurrentUserClient, Issue,
+    ListPullRequestsClient, ListReviewsClient, PullRequest, Review, User,
 };
 
 // Mock GitHub client for testing
 pub struct MockGitHubClient {
     username: String,
-    /// reviewes keyed by (owner, repo, pr number)
+    /// reviews keyed by (owner, repo, pr number)
     reviews: HashMap<(String, String, u32), Vec<Review>>,
 
     /// comments keyed by review_id
     review_comments: HashMap<String, Vec<Comment>>,
+
+    /// issues keyed by (owner, repo, issue number)
+    issues: HashMap<(String, String, u32), Issue>,
+
+    /// pull requests keyed by (owner, repo)
+    pull_requests: HashMap<(String, String), Vec<PullRequest>>,
 }
 
 impl MockGitHubClient {
@@ -22,6 +29,8 @@ impl MockGitHubClient {
             username: username.to_string(),
             reviews: Default::default(),
             review_comments: Default::default(),
+            issues: Default::default(),
+            pull_requests: Default::default(),
         }
     }
 
@@ -46,6 +55,25 @@ impl MockGitHubClient {
     ) -> Self {
         self.review_comments
             .insert(review_id.to_string(), comments.to_vec());
+        self
+    }
+
+    pub fn with_issue(mut self, owner: &str, repo: &str, issue: Issue) -> Self {
+        self.issues
+            .insert((owner.to_string(), repo.to_string(), issue.number), issue);
+        self
+    }
+
+    pub fn with_pull_requests<const N: usize>(
+        mut self,
+        owner: &str,
+        repo: &str,
+        pull_requests: [PullRequest; N],
+    ) -> Self {
+        self.pull_requests.insert(
+            (owner.to_string(), repo.to_string()),
+            pull_requests.to_vec(),
+        );
         self
     }
 }
@@ -74,5 +102,25 @@ impl FetchReviewCommentsClient for MockGitHubClient {
             .get(review_id)
             .cloned()
             .ok_or_else(|| anyhow!("Could not find comments for review {review_id}"))
+    }
+}
+
+impl FetchIssueClient for MockGitHubClient {
+    fn fetch_issue(&self, owner: &str, repo: &str, issue_number: u32) -> Result<Issue> {
+        let key = (owner.to_string(), repo.to_string(), issue_number);
+        self.issues
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| anyhow!("Could not find issue {issue_number} for {owner}/{repo}"))
+    }
+}
+
+impl ListPullRequestsClient for MockGitHubClient {
+    fn list_pull_requests(&self, owner: &str, repo: &str) -> Result<Vec<PullRequest>> {
+        let key = (owner.to_string(), repo.to_string());
+        self.pull_requests
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| anyhow!("Could not find pull requests for {owner}/{repo}"))
     }
 }
