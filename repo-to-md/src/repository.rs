@@ -59,20 +59,58 @@ pub struct LocalRepository;
 impl GetRepoistoryInfo for LocalRepository {
     fn get_github_owner_and_repo(&self) -> Result<(String, String)> {
         let output = Command::new("git")
-            .args(["remote", "get-url", "origin"])
+            .args(["remote"])
             .output()
             .context("Failed to execute git command")?;
 
         if !output.status.success() {
-            anyhow::bail!("Git remote not configured");
+            bail!("Failed to list git remotes");
         }
 
-        let url = str::from_utf8(&output.stdout)
-            .context("Invalid UTF-8 in git remote URL")?
-            .trim()
-            .to_string();
+        let remotes_str =
+            str::from_utf8(&output.stdout).context("Invalid UTF-8 in git remote output")?;
 
-        parse_github_url(&url)
+        let remotes: Vec<&str> = remotes_str.lines().collect();
+
+        if remotes.is_empty() {
+            bail!("No git remotes configured");
+        }
+
+        let mut github_remotes: Vec<(String, String, String)> = Vec::new();
+        for remote in remotes {
+            let url_output = Command::new("git")
+                .args(["remote", "get-url", remote])
+                .output()
+                .context("Failed to get remote URL")?;
+
+            if url_output.status.success() {
+                let url = str::from_utf8(&url_output.stdout)
+                    .context("Invalid UTF-8 in git remote URL")?
+                    .trim();
+
+                if let Ok((owner, repo)) = parse_github_url(url) {
+                    github_remotes.push((remote.to_string(), owner, repo));
+                }
+            }
+        }
+
+        match github_remotes.len() {
+            0 => bail!("No GitHub remotes found"),
+            1 => {
+                let (_, owner, repo) = github_remotes.remove(0);
+                Ok((owner, repo))
+            }
+            _ => {
+                let remote_list: Vec<String> = github_remotes
+                    .iter()
+                    .map(|(name, owner, repo)| format!("  {} -> {}/{}", name, owner, repo))
+                    .collect();
+                bail!(
+                    "Multiple GitHub remotes found. Please specify --repo:\n{}",
+                    remote_list.join("\n")
+                );
+            }
+        }
     }
 }
 
