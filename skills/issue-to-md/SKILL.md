@@ -5,11 +5,16 @@ description: Fetches GitHub issues for the current repository and formats them a
 
 # Fetching GitHub issues
 
-Fetches GitHub issues and formats them as LLM-friendly markdown.
+Use the `repo-to-md` CLI tool to fetch GitHub issues and formats them as
+LLM-friendly markdown.
 
 ## Primary usage
 
-Get issue #42 from the current repository:
+```bash
+repo-to-md issue ISSUE_NUMBER
+```
+
+For example, to get issue #42 from the current repository, run
 
 ```bash
 repo-to-md issue 42
@@ -38,10 +43,10 @@ Generates markdown with issue metadata and description:
 ```markdown
 # Issue #42: Title Here
 
-**State:** OPEN
-**Author:** @username
-**Created:** 2024-01-15T10:30:00Z
-**Labels:** bug, enhancement
+- **State:** OPEN
+- **Author:** @username
+- **Created:** 2024-01-15T10:30:00Z
+- **Labels:** bug, enhancement
 
 ## Description
 

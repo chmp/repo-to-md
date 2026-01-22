@@ -445,4 +445,57 @@ mod cli_end_to_end {
         assert!(output_str.contains("# Issue #99: Feature request"));
         assert!(output_str.contains("Please add this feature."));
     }
+
+    #[test]
+    fn test_review_command_fails_with_multiple_prs_for_branch() {
+        let client = MockGitHubClient::new("testuser").with_pull_requests(
+            "owner",
+            "repo",
+            [
+                create_test_pull_request("pr-1", 10, "feature-branch"),
+                create_test_pull_request("pr-2", 20, "feature-branch"),
+            ],
+        );
+        let repository = MockRepository::new("owner", "repo", "origin/feature-branch");
+
+        let cmd = ReviewCommand {
+            pr: None,
+            repo: Some("owner/repo".to_string()),
+            review: None,
+            author: None,
+        };
+
+        let mut output = Vec::new();
+        let result = cmd.run(&client, &repository, &mut output);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Multiple PRs found"));
+        assert!(err.contains("#10"));
+        assert!(err.contains("#20"));
+    }
+
+    #[test]
+    fn test_review_command_fails_with_no_pr_for_branch() {
+        let client = MockGitHubClient::new("testuser").with_pull_requests(
+            "owner",
+            "repo",
+            [create_test_pull_request("pr-1", 10, "other-branch")],
+        );
+        let repository = MockRepository::new("owner", "repo", "origin/feature-branch");
+
+        let cmd = ReviewCommand {
+            pr: None,
+            repo: Some("owner/repo".to_string()),
+            review: None,
+            author: None,
+        };
+
+        let mut output = Vec::new();
+        let result = cmd.run(&client, &repository, &mut output);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("No open PR found for branch"));
+    }
 }

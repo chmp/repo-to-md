@@ -160,14 +160,28 @@ impl ReviewCommand {
 
         let open_prs = client.list_pull_requests(owner, repo)?;
 
-        for pr in open_prs {
-            eprintln!("Upstream {}", pr.head_ref_name);
-            if pr.head_ref_name == branch {
-                return Ok(pr.number);
+        let matching_prs: Vec<_> = open_prs
+            .iter()
+            .filter(|pr| pr.head_ref_name == branch)
+            .collect();
+
+        match <[_; 1]>::try_from(matching_prs) {
+            Ok([matching_pr]) => Ok(matching_pr.number),
+            Err(matching_prs) if matching_prs.is_empty() => {
+                bail!("No open PR found for branch {branch:?}")
+            }
+            Err(matching_prs) => {
+                let pr_list: Vec<String> = matching_prs
+                    .iter()
+                    .map(|pr| format!("  #{}: {}", pr.number, pr.title))
+                    .collect();
+                bail!(
+                    "Multiple PRs found for branch '{}'. Please specify --pr:\n{}",
+                    branch,
+                    pr_list.join("\n")
+                );
             }
         }
-
-        bail!("Could not determine PR number");
     }
 }
 

@@ -189,17 +189,17 @@ pub fn format_issue_as_markdown(issue: &Issue) -> String {
     output.push_str(&format!("# Issue #{}: {}\n\n", issue.number, issue.title));
 
     // Metadata
-    output.push_str(&format!("**State:** {}\n", issue.state));
+    output.push_str(&format!("- **State:** {}\n", issue.state));
 
     if let Some(author) = &issue.author {
-        output.push_str(&format!("**Author:** @{}\n", author.login));
+        output.push_str(&format!("- **Author:** @{}\n", author.login));
     }
 
-    output.push_str(&format!("**Created:** {}\n", issue.created_at));
+    output.push_str(&format!("- **Created:** {}\n", issue.created_at));
 
     if !issue.labels.is_empty() {
         let label_names: Vec<&str> = issue.labels.iter().map(|l| l.name.as_str()).collect();
-        output.push_str(&format!("**Labels:** {}\n", label_names.join(", ")));
+        output.push_str(&format!("- **Labels:** {}\n", label_names.join(", ")));
     }
 
     // Description
