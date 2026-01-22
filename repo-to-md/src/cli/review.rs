@@ -165,10 +165,12 @@ impl ReviewCommand {
             .filter(|pr| pr.head_ref_name == branch)
             .collect();
 
-        match matching_prs.len() {
-            0 => bail!("No open PR found for branch '{}'", branch),
-            1 => Ok(matching_prs[0].number),
-            _ => {
+        match <[_; 1]>::try_from(matching_prs) {
+            Ok([matching_pr]) => Ok(matching_pr.number),
+            Err(matching_prs) if matching_prs.is_empty() => {
+                bail!("No open PR found for branch {branch:?}")
+            }
+            Err(matching_prs) => {
                 let pr_list: Vec<String> = matching_prs
                     .iter()
                     .map(|pr| format!("  #{}: {}", pr.number, pr.title))

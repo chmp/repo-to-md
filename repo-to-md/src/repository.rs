@@ -94,13 +94,12 @@ impl GetRepoistoryInfo for LocalRepository {
             }
         }
 
-        match github_remotes.len() {
-            0 => bail!("No GitHub remotes found"),
-            1 => {
-                let (_, owner, repo) = github_remotes.remove(0);
-                Ok((owner, repo))
+        match <[_; 1]>::try_from(github_remotes) {
+            Ok([(_, owner, repo)]) => Ok((owner, repo)),
+            Err(github_remotes) if github_remotes.is_empty() => {
+                bail!("No GitHub remotes found");
             }
-            _ => {
+            Err(github_remotes) => {
                 let remote_list: Vec<String> = github_remotes
                     .iter()
                     .map(|(name, owner, repo)| format!("  {} -> {}/{}", name, owner, repo))
