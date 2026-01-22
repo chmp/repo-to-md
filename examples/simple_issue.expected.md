@@ -1,9 +1,9 @@
 # Issue #42: Add dark mode support
 
-**State:** OPEN
-**Author:** @octocat
-**Created:** 2024-01-15T10:30:00Z
-**Labels:** enhancement, ui
+- **State:** OPEN
+- **Author:** @octocat
+- **Created:** 2024-01-15T10:30:00Z
+- **Labels:** enhancement, ui
 
 ## Description
 
