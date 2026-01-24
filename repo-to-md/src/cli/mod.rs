@@ -11,7 +11,7 @@ pub use issue::IssueCommand;
 pub use query::QueryCommand;
 pub use review::ReviewCommand;
 
-use crate::{client::GithubClient, repository::LocalRepository};
+use crate::{client::GithubClient, executable::check_executable, repository::LocalRepository};
 
 #[derive(FromArgs)]
 /// repo-to-md: Format GitHub PR comments as markdown
@@ -33,10 +33,25 @@ impl Cli {
     pub fn run(self) -> Result<()> {
         let mut stdout = std::io::stdout();
         match self.command {
-            Command::Review(cmd) => cmd.run(&GithubClient, &LocalRepository, &mut stdout),
-            Command::Issue(cmd) => cmd.run(&GithubClient, &LocalRepository, &mut stdout),
+            Command::Review(cmd) => {
+                check_executable("gh")?;
+                if cmd.repo.is_none() || cmd.apply {
+                    check_executable("git")?;
+                }
+                cmd.run(&GithubClient, &LocalRepository, &mut stdout)
+            }
+            Command::Issue(cmd) => {
+                check_executable("gh")?;
+                if cmd.repo.is_none() {
+                    check_executable("git")?;
+                }
+                cmd.run(&GithubClient, &LocalRepository, &mut stdout)
+            }
             Command::InstallSkill(cmd) => cmd.run(),
-            Command::Query(cmd) => cmd.run(&GithubClient),
+            Command::Query(cmd) => {
+                check_executable("gh")?;
+                cmd.run(&GithubClient)
+            }
         }
     }
 }
