@@ -5,12 +5,13 @@ use anyhow::{bail, Context, Result};
 use argh::FromArgs;
 
 use crate::{
+    apply::{apply_comments_to_files, print_apply_result},
     client::{
         Comment, FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient,
         ListReviewsClient, Review,
     },
     formatting::format_comments_as_markdown,
-    repository::{GetCurrentBranch, GetRepoistoryInfo},
+    repository::{CheckWorkingDirectory, GetCurrentBranch, GetRepoRoot, GetRepoistoryInfo},
 };
 
 #[derive(FromArgs)]
@@ -32,6 +33,14 @@ pub struct ReviewCommand {
     /// filter reviews by author login (use "@me" for your own reviews)
     #[argh(option)]
     pub author: Option<String>,
+
+    /// apply comments directly to source files as TODO comments
+    #[argh(switch)]
+    pub apply: bool,
+
+    /// skip safety check for uncommitted changes (use with --apply)
+    #[argh(switch)]
+    pub force: bool,
 }
 
 /// Handles the review subcommand - fetches and formats PR comments.
@@ -58,9 +67,17 @@ impl ReviewCommand {
               + ListReviewsClient
               + FetchReviewCommentsClient
               + ListPullRequestsClient),
-        repository: &(impl GetRepoistoryInfo + GetCurrentBranch),
+        repository: &(impl GetRepoistoryInfo + GetCurrentBranch + CheckWorkingDirectory + GetRepoRoot),
         writer: &mut impl Write,
     ) -> Result<()> {
+        // Safety check for apply mode
+        if self.apply && !self.force && repository.has_uncommitted_changes()? {
+            bail!(
+                "You have uncommitted changes. Commit or stash them first, \
+                 or use --force to apply anyway."
+            );
+        }
+
         let review_id = self.get_review_id(client, repository)?;
         let comments = client.fetch_review_comments(&review_id)?;
 
@@ -70,8 +87,15 @@ impl ReviewCommand {
         }
 
         let grouped_comments = group_comments_by_file(comments);
-        let markdown = format_comments_as_markdown(grouped_comments);
-        write!(writer, "{}", markdown)?;
+
+        if self.apply {
+            let repo_root = repository.get_repo_root()?;
+            let result = apply_comments_to_files(grouped_comments, &repo_root)?;
+            print_apply_result(&result, writer)?;
+        } else {
+            let markdown = format_comments_as_markdown(grouped_comments);
+            write!(writer, "{}", markdown)?;
+        }
 
         Ok(())
     }

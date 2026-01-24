@@ -226,6 +226,8 @@ mod cli_end_to_end {
             repo: Some("owner/repo".to_string()),
             review: Some("review-123".to_string()),
             author: None,
+            apply: false,
+            force: false,
         };
 
         let mut output = Vec::new();
@@ -267,6 +269,8 @@ mod cli_end_to_end {
             repo: Some("owner/repo".to_string()),
             review: None,
             author: Some("alice".to_string()),
+            apply: false,
+            force: false,
         };
 
         let mut output = Vec::new();
@@ -305,6 +309,8 @@ mod cli_end_to_end {
             repo: Some("owner/repo".to_string()),
             review: None,
             author: Some("@me".to_string()),
+            apply: false,
+            force: false,
         };
 
         let mut output = Vec::new();
@@ -348,6 +354,8 @@ mod cli_end_to_end {
             repo: Some("owner/repo".to_string()),
             review: None,
             author: None,
+            apply: false,
+            force: false,
         };
 
         let mut output = Vec::new();
@@ -374,6 +382,8 @@ mod cli_end_to_end {
             repo: Some("owner/repo".to_string()),
             review: Some("review-123".to_string()),
             author: None,
+            apply: false,
+            force: false,
         };
 
         let mut output = Vec::new();
@@ -463,6 +473,8 @@ mod cli_end_to_end {
             repo: Some("owner/repo".to_string()),
             review: None,
             author: None,
+            apply: false,
+            force: false,
         };
 
         let mut output = Vec::new();
@@ -489,6 +501,8 @@ mod cli_end_to_end {
             repo: Some("owner/repo".to_string()),
             review: None,
             author: None,
+            apply: false,
+            force: false,
         };
 
         let mut output = Vec::new();
@@ -497,5 +511,145 @@ mod cli_end_to_end {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("No open PR found for branch"));
+    }
+
+    #[test]
+    fn test_review_command_apply_fails_with_uncommitted_changes() {
+        let client = MockGitHubClient::new("testuser")
+            .with_reviews(
+                "owner",
+                "repo",
+                42,
+                [create_test_review("review-123", "reviewer", 1)],
+            )
+            .with_comments(
+                "review-123",
+                [create_test_comment(
+                    "src/lib.rs",
+                    Some(10),
+                    "Fix this",
+                    "reviewer",
+                )],
+            );
+        let repository =
+            MockRepository::new("owner", "repo", "origin/main").with_uncommitted_changes(true);
+
+        let cmd = ReviewCommand {
+            pr: Some(42),
+            repo: Some("owner/repo".to_string()),
+            review: Some("review-123".to_string()),
+            author: None,
+            apply: true,
+            force: false,
+        };
+
+        let mut output = Vec::new();
+        let result = cmd.run(&client, &repository, &mut output);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("uncommitted changes"));
+    }
+
+    #[test]
+    fn test_review_command_apply_force_bypasses_safety_check() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("src").join("lib.rs");
+        fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        fs::write(&file_path, "fn main() {\n    let x = 1;\n}\n").unwrap();
+
+        let client = MockGitHubClient::new("testuser")
+            .with_reviews(
+                "owner",
+                "repo",
+                42,
+                [create_test_review("review-123", "reviewer", 1)],
+            )
+            .with_comments(
+                "review-123",
+                [create_test_comment(
+                    "src/lib.rs",
+                    Some(2),
+                    "Consider renaming x",
+                    "reviewer",
+                )],
+            );
+        let repository = MockRepository::new("owner", "repo", "origin/main")
+            .with_uncommitted_changes(true)
+            .with_repo_root(temp_dir.path().to_path_buf());
+
+        let cmd = ReviewCommand {
+            pr: Some(42),
+            repo: Some("owner/repo".to_string()),
+            review: Some("review-123".to_string()),
+            author: None,
+            apply: true,
+            force: true,
+        };
+
+        let mut output = Vec::new();
+        let result = cmd.run(&client, &repository, &mut output);
+
+        assert!(result.is_ok());
+        let output_str = String::from_utf8(output).unwrap();
+        assert!(output_str.contains("Applied 1 comment(s)"));
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert!(content.contains("TODO: <review"));
+        assert!(content.contains("Consider renaming x"));
+    }
+
+    #[test]
+    fn test_review_command_apply_mode() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("src").join("main.rs");
+        fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        fs::write(&file_path, "fn hello() {\n    println!(\"Hello\");\n}\n").unwrap();
+
+        let client = MockGitHubClient::new("testuser")
+            .with_reviews(
+                "owner",
+                "repo",
+                42,
+                [create_test_review("review-123", "reviewer", 1)],
+            )
+            .with_comments(
+                "review-123",
+                [create_test_comment(
+                    "src/main.rs",
+                    Some(2),
+                    "Add error handling",
+                    "reviewer",
+                )],
+            );
+        let repository = MockRepository::new("owner", "repo", "origin/main")
+            .with_repo_root(temp_dir.path().to_path_buf());
+
+        let cmd = ReviewCommand {
+            pr: Some(42),
+            repo: Some("owner/repo".to_string()),
+            review: Some("review-123".to_string()),
+            author: None,
+            apply: true,
+            force: false,
+        };
+
+        let mut output = Vec::new();
+        cmd.run(&client, &repository, &mut output).unwrap();
+
+        let output_str = String::from_utf8(output).unwrap();
+        assert!(output_str.contains("Applied 1 comment(s)"));
+        assert!(output_str.contains("1 file(s)"));
+
+        let content = fs::read_to_string(&file_path).unwrap();
+        assert!(content.contains("// TODO: <review user=\"reviewer\">"));
+        assert!(content.contains("// Add error handling"));
+        assert!(content.contains("// </review>"));
     }
 }
