@@ -8,6 +8,7 @@ use std::time::SystemTime;
 use anyhow::{bail, Context, Result};
 
 use crate::client::Comment;
+use crate::diff::parse_diff_hunk_with_line_numbers;
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
 
 /// Result of applying comments to source files.
@@ -33,24 +34,15 @@ pub struct SkippedComment {
 }
 
 /// A wrapper for truncating strings in Display without allocation.
-struct Truncated<'a> {
-    s: &'a str,
-    max_len: usize,
-}
-
-impl<'a> Truncated<'a> {
-    fn new(s: &'a str, max_len: usize) -> Self {
-        Self { s, max_len }
-    }
-}
+struct Truncated<'a>(&'a str, usize);
 
 impl fmt::Display for Truncated<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let first_line = self.s.lines().next().unwrap_or(self.s);
-        if first_line.len() > self.max_len {
-            write!(f, "{}...", &first_line[..self.max_len])
+        let first_line = self.0.lines().next().unwrap_or(self.0);
+        if first_line.len() > self.1 {
+            write!(f, "{}...", &first_line[..self.1])
         } else {
-            write!(f, "{}", first_line)
+            write!(f, "{first_line}")
         }
     }
 }
@@ -137,7 +129,7 @@ fn skip_comments_for_missing_file(
         result.comments_skipped.push(SkippedComment {
             path: file_path.to_string(),
             reason: "File not found".to_string(),
-            body_preview: Truncated::new(&comment.body, 50).to_string(),
+            body_preview: Truncated(&comment.body, 50).to_string(),
         });
     }
 }
@@ -156,12 +148,12 @@ fn filter_applicable_comments<'a>(
                 eprintln!(
                     "Skipping comment without line number in {}: {}",
                     file_path,
-                    Truncated::new(&comment.body, 50)
+                    Truncated(&comment.body, 50)
                 );
                 result.comments_skipped.push(SkippedComment {
                     path: file_path.to_string(),
                     reason: "Comment has no line number".to_string(),
-                    body_preview: Truncated::new(&comment.body, 50).to_string(),
+                    body_preview: Truncated(&comment.body, 50).to_string(),
                 });
             }
         }
@@ -170,6 +162,14 @@ fn filter_applicable_comments<'a>(
     // Sort by line number descending (insert from bottom to top)
     applicable.sort_by(|a, b| b.0.cmp(&a.0));
     applicable
+}
+
+fn get_expected_line_from_diff(diff_hunk: &str, line_num: u32) -> Option<String> {
+    let (diff_lines, _, _) = parse_diff_hunk_with_line_numbers(diff_hunk, None);
+    diff_lines
+        .into_iter()
+        .find(|dl| dl.new_line_number == Some(line_num))
+        .map(|dl| dl.content)
 }
 
 fn insert_comments_into_lines(
@@ -199,12 +199,28 @@ fn insert_comments_into_lines(
                     line_num,
                     lines.len()
                 ),
-                body_preview: Truncated::new(&comment.body, 50).to_string(),
+                body_preview: Truncated(&comment.body, 50).to_string(),
             });
             continue;
         }
 
         let target_line = &lines[line_num_usize - 1];
+
+        if let Some(expected_line) = get_expected_line_from_diff(&comment.diff_hunk, line_num) {
+            if target_line.trim() != expected_line.trim() {
+                eprintln!(
+                    "Skipping comment: line {} in {} has changed since the review",
+                    line_num, file_path
+                );
+                result.comments_skipped.push(SkippedComment {
+                    path: file_path.to_string(),
+                    reason: format!("Line {line_num} content has changed since the review"),
+                    body_preview: Truncated(&comment.body, 50).to_string(),
+                });
+                continue;
+            }
+        }
+
         let indentation = get_indentation(target_line);
         let formatted = format_comment_for_insertion(comment, &indentation, prefix, suffix);
 
@@ -353,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_truncated_display_short() {
-        let result = format!("{}", Truncated::new("short text", 50));
+        let result = format!("{}", Truncated("short text", 50));
         assert_eq!(result, "short text");
     }
 
@@ -361,14 +377,14 @@ mod tests {
     fn test_truncated_display_long() {
         let result = format!(
             "{}",
-            Truncated::new("this is a very long text that exceeds the limit", 20)
+            Truncated("this is a very long text that exceeds the limit", 20)
         );
         assert_eq!(result, "this is a very long ...");
     }
 
     #[test]
     fn test_truncated_display_multiline() {
-        let result = format!("{}", Truncated::new("first line\nsecond line", 50));
+        let result = format!("{}", Truncated("first line\nsecond line", 50));
         assert_eq!(result, "first line");
     }
 

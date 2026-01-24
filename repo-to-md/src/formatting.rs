@@ -173,21 +173,23 @@ fn output_comment(
     prefix: &str,
     suffix: &str,
 ) {
-    output.push_str(&format!(
-        "{}{} <review user=\"{}\">{}\n",
-        indentation, prefix, comment.user.login, suffix
-    ));
+    use std::fmt::Write;
 
-    // Handle multi-line comments: each line gets the prefix
+    let user_login = &comment.user.login;
+    let _ = writeln!(
+        output,
+        "{indentation}{prefix} <review user=\"{user_login}\">{suffix}"
+    );
+
     for line in comment.body.lines() {
         if line.is_empty() {
-            output.push_str(&format!("{}{}{}\n", indentation, prefix, suffix));
+            let _ = writeln!(output, "{indentation}{prefix}{suffix}");
         } else {
-            output.push_str(&format!("{}{} {}{}\n", indentation, prefix, line, suffix));
+            let _ = writeln!(output, "{indentation}{prefix} {line}{suffix}");
         }
     }
 
-    output.push_str(&format!("{}{} </review>{}\n", indentation, prefix, suffix));
+    let _ = writeln!(output, "{indentation}{prefix} </review>{suffix}");
 }
 
 /// Formats a GitHub issue as markdown.
