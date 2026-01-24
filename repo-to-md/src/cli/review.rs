@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use argh::FromArgs;
 
 use crate::{
@@ -63,10 +63,12 @@ pub struct ReviewCommand {
 impl ReviewCommand {
     pub fn run(
         self,
-        client: &(impl GetCurrentUserClient
-              + ListReviewsClient
-              + FetchReviewCommentsClient
-              + ListPullRequestsClient),
+        client: &(
+             impl GetCurrentUserClient
+             + ListReviewsClient
+             + FetchReviewCommentsClient
+             + ListPullRequestsClient
+         ),
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch + CheckWorkingDirectory + GetRepoRoot),
         writer: &mut impl Write,
     ) -> Result<()> {

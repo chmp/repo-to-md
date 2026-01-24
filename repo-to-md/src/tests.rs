@@ -40,30 +40,40 @@ mod diff_parsing {
 
         let result = extract_code_from_diff_hunk(diff_hunk);
 
-        assert!(result
-            .iter()
-            .any(|l| l.contains("pub output: Option<PathBuf>")));
-        assert!(result
-            .iter()
-            .any(|l| l.contains("HTML sanitization configuration")));
-        assert!(result
-            .iter()
-            .any(|l| l.contains("pub sanitizer: SanitizerConfig")));
+        assert!(
+            result
+                .iter()
+                .any(|l| l.contains("pub output: Option<PathBuf>"))
+        );
+        assert!(
+            result
+                .iter()
+                .any(|l| l.contains("HTML sanitization configuration"))
+        );
+        assert!(
+            result
+                .iter()
+                .any(|l| l.contains("pub sanitizer: SanitizerConfig"))
+        );
     }
 }
 
 #[cfg(test)]
 mod issue_formatting {
-    use crate::{client::Issue, formatting::format_issue_as_markdown};
+    use crate::{client::Issue, formatting::write_issue_as_markdown};
 
     fn test_issue_formatting(json: &str, expected: &str) {
         let issue = serde_json::from_str::<Issue>(json).expect("Failed to parse JSON");
-        let output = format_issue_as_markdown(&issue);
+        let mut actual = Vec::<u8>::new();
+        write_issue_as_markdown(&mut actual, &issue).expect("infaillable formatting");
+
+        let actual = String::from_utf8(actual).expect("valid utf8");
+
         assert_eq!(
-            output.trim(),
+            actual.trim(),
             expected.trim(),
             "Output mismatch:\n\nGot:\n{}\n\nExpected:\n{}",
-            output,
+            actual,
             expected
         );
     }

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 /// Mock repository for testing
 pub struct MockRepository {

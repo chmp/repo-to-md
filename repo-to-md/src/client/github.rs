@@ -457,7 +457,9 @@ fn validate_github_repo(repo: &str) -> Result<()> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
     {
-        anyhow::bail!("GitHub repository name can only contain alphanumeric characters, hyphens, underscores, and dots");
+        anyhow::bail!(
+            "GitHub repository name can only contain alphanumeric characters, hyphens, underscores, and dots"
+        );
     }
 
     Ok(())

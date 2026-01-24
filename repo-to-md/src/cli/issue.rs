@@ -1,10 +1,10 @@
 use std::io::Write;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use argh::FromArgs;
 
 use crate::{
-    client::FetchIssueClient, formatting::format_issue_as_markdown, repository::GetRepoistoryInfo,
+    client::FetchIssueClient, formatting::write_issue_as_markdown, repository::GetRepoistoryInfo,
 };
 
 #[derive(FromArgs, Default)]
@@ -35,8 +35,7 @@ impl IssueCommand {
         );
 
         let issue = client.fetch_issue(&owner, &repo, self.issue_number)?;
-        let markdown = format_issue_as_markdown(&issue);
-        write!(writer, "{}", markdown)?;
+        write_issue_as_markdown(writer, &issue)?;
 
         Ok(())
     }

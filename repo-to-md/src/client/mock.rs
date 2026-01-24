@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
 use crate::client::{
     Comment, FetchIssueClient, FetchReviewCommentsClient, GetCurrentUserClient, Issue,

@@ -103,7 +103,8 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
 
             // Output comments without line numbers at the TOP of the hunk
             for comment in comments_without_line {
-                output_comment(&mut output, comment, "", comment_prefix, comment_suffix);
+                output_comment(&mut output, comment, "", comment_prefix, comment_suffix)
+                    .expect("infaillable formatting");
             }
 
             // Show ellipsis if content was truncated at start
@@ -118,20 +119,19 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
                 output.push('\n');
 
                 // Check if there are comments for this line
-                if let Some(line_num) = diff_line.new_line_number {
-                    if let Some(comments) = comments_by_line.get(&line_num) {
-                        // Extract indentation from the code line
-                        let indentation = get_indentation(&diff_line.content);
-                        // Output ALL comments for this line
-                        for comment in comments {
-                            output_comment(
-                                &mut output,
-                                comment,
-                                &indentation,
-                                comment_prefix,
-                                comment_suffix,
-                            );
-                        }
+                if let Some(line_num) = diff_line.new_line_number
+                    && let Some(comments) = comments_by_line.get(&line_num)
+                {
+                    let indentation = get_indentation(&diff_line.content);
+                    for comment in comments {
+                        output_comment(
+                            &mut output,
+                            comment,
+                            &indentation,
+                            comment_prefix,
+                            comment_suffix,
+                        )
+                        .expect("infaillable formatting");
                     }
                 }
             }
@@ -172,24 +172,24 @@ fn output_comment(
     indentation: &str,
     prefix: &str,
     suffix: &str,
-) {
+) -> std::fmt::Result {
     use std::fmt::Write;
 
     let user_login = &comment.user.login;
-    let _ = writeln!(
+    writeln!(
         output,
         "{indentation}{prefix} <review user=\"{user_login}\">{suffix}"
-    );
+    )?;
 
     for line in comment.body.lines() {
         if line.is_empty() {
-            let _ = writeln!(output, "{indentation}{prefix}{suffix}");
+            writeln!(output, "{indentation}{prefix}{suffix}")?;
         } else {
-            let _ = writeln!(output, "{indentation}{prefix} {line}{suffix}");
+            writeln!(output, "{indentation}{prefix} {line}{suffix}")?;
         }
     }
 
-    let _ = writeln!(output, "{indentation}{prefix} </review>{suffix}");
+    writeln!(output, "{indentation}{prefix} </review>{suffix}")
 }
 
 /// Formats a GitHub issue as markdown.
@@ -204,40 +204,56 @@ fn output_comment(
 /// # Returns
 ///
 /// A formatted markdown string
-pub fn format_issue_as_markdown(issue: &Issue) -> String {
-    let mut output = String::new();
-
+pub fn write_issue_as_markdown(
+    writer: &mut impl std::io::Write,
+    issue: &Issue,
+) -> std::io::Result<()> {
     // Title
-    output.push_str(&format!("# Issue #{}: {}\n\n", issue.number, issue.title));
+    writeln!(
+        writer,
+        "# Issue #{number}: {title}",
+        number = issue.number,
+        title = issue.title,
+    )?;
+    writeln!(writer)?;
 
-    // Metadata
-    output.push_str(&format!("- **State:** {}\n", issue.state));
+    writeln!(writer, "- **State:** {state}", state = issue.state)?;
 
     if let Some(author) = &issue.author {
-        output.push_str(&format!("- **Author:** @{}\n", author.login));
+        writeln!(writer, "- **Author:** @{login}", login = author.login)?;
     }
 
-    output.push_str(&format!("- **Created:** {}\n", issue.created_at));
+    writeln!(
+        writer,
+        "- **Created:** {created}",
+        created = issue.created_at
+    )?;
 
     if !issue.labels.is_empty() {
-        let label_names: Vec<&str> = issue.labels.iter().map(|l| l.name.as_str()).collect();
-        output.push_str(&format!("- **Labels:** {}\n", label_names.join(", ")));
+        write!(writer, "- **Labels:** ")?;
+        for (idx, label) in issue.labels.iter().enumerate() {
+            if idx != 0 {
+                write!(writer, ", {name}", name = label.name)?;
+            } else {
+                write!(writer, "{name}", name = label.name)?;
+            }
+        }
+        writeln!(writer)?;
     }
 
-    // Description
-    output.push_str("\n## Description\n\n");
-    if let Some(body) = &issue.body {
-        if !body.is_empty() {
-            output.push_str(body);
-            if !body.ends_with('\n') {
-                output.push('\n');
-            }
-        } else {
-            output.push_str("*No description provided.*\n");
+    writeln!(writer)?;
+    writeln!(writer, "## Description")?;
+    writeln!(writer)?;
+    if let Some(body) = &issue.body
+        && !body.is_empty()
+    {
+        write!(writer, "{body}")?;
+        if !body.ends_with('\n') {
+            writeln!(writer)?;
         }
     } else {
-        output.push_str("*No description provided.*\n");
+        writeln!(writer, "*No description provided.*")?;
     }
 
-    output
+    Ok(())
 }

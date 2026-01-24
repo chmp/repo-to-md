@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::Path;
 use std::time::SystemTime;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::client::Comment;
 use crate::diff::parse_diff_hunk_with_line_numbers;
@@ -206,19 +206,19 @@ fn insert_comments_into_lines(
 
         let target_line = &lines[line_num_usize - 1];
 
-        if let Some(expected_line) = get_expected_line_from_diff(&comment.diff_hunk, line_num) {
-            if target_line.trim() != expected_line.trim() {
-                eprintln!(
-                    "Skipping comment: line {} in {} has changed since the review",
-                    line_num, file_path
-                );
-                result.comments_skipped.push(SkippedComment {
-                    path: file_path.to_string(),
-                    reason: format!("Line {line_num} content has changed since the review"),
-                    body_preview: Truncated(&comment.body, 50).to_string(),
-                });
-                continue;
-            }
+        if let Some(expected_line) = get_expected_line_from_diff(&comment.diff_hunk, line_num)
+            && target_line.trim() != expected_line.trim()
+        {
+            eprintln!(
+                "Skipping comment: line {} in {} has changed since the review",
+                line_num, file_path
+            );
+            result.comments_skipped.push(SkippedComment {
+                path: file_path.to_string(),
+                reason: format!("Line {line_num} content has changed since the review"),
+                body_preview: Truncated(&comment.body, 50).to_string(),
+            });
+            continue;
         }
 
         let indentation = get_indentation(target_line);
