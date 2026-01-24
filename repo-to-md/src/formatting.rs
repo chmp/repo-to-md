@@ -1,10 +1,11 @@
+use std::collections::HashMap;
+use std::io::Write;
+
 use crate::client::{Comment, Issue};
-/// Markdown formatting utilities for PR review comments.
 use crate::diff::{calculate_context_range, parse_diff_hunk_with_line_numbers};
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
-use std::collections::HashMap;
 
-/// Formats grouped PR review comments as markdown with inline code blocks.
+/// Writes grouped PR review comments as markdown with inline code blocks.
 ///
 /// This is the core formatting engine that generates markdown output designed for
 /// LLM consumption. For each file:
@@ -20,17 +21,16 @@ use std::collections::HashMap;
 ///
 /// # Arguments
 ///
+/// * `writer` - The writer to output the formatted markdown to
 /// * `grouped_comments` - Comments grouped by file path (from [`group_comments_by_file`])
-///
-/// # Returns
-///
-/// A formatted markdown string with headings, code blocks, and inline comments.
-pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment>>) -> String {
-    let mut output = String::new();
-
-    // Add introduction
-    output.push_str("# Pull Request Review Comments\n\n");
-    output.push_str("Please address the following review comments:\n\n");
+pub fn write_comments_as_markdown(
+    writer: &mut impl Write,
+    grouped_comments: HashMap<String, Vec<Comment>>,
+) -> std::io::Result<()> {
+    writeln!(writer, "# Pull Request Review Comments")?;
+    writeln!(writer)?;
+    writeln!(writer, "Please address the following review comments:")?;
+    writeln!(writer)?;
 
     let mut files: Vec<_> = grouped_comments.keys().collect();
     files.sort();
@@ -89,34 +89,30 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
                 let max_line = *line_nums.iter().max().unwrap();
 
                 if min_line == max_line {
-                    output.push_str(&format!("## `{}` - Line {}\n\n", file_path, min_line));
+                    writeln!(writer, "## `{file_path}` - Line {min_line}")?;
                 } else {
-                    output.push_str(&format!(
-                        "## `{}` - Lines {}-{}\n\n",
-                        file_path, min_line, max_line
-                    ));
+                    writeln!(writer, "## `{file_path}` - Lines {min_line}-{max_line}")?;
                 }
+                writeln!(writer)?;
             }
 
             // Open code block for this hunk
-            output.push_str(&format!("```{}\n", language));
+            writeln!(writer, "```{language}")?;
 
             // Output comments without line numbers at the TOP of the hunk
             for comment in comments_without_line {
-                output_comment(&mut output, comment, "", comment_prefix, comment_suffix)
-                    .expect("infaillable formatting");
+                write_comment(writer, comment, "", comment_prefix, comment_suffix)?;
             }
 
             // Show ellipsis if content was truncated at start
             if truncated_start {
-                output.push_str("...\n");
+                writeln!(writer, "...")?;
             }
 
             // Output code with inline comments
             for diff_line in diff_lines {
                 // Output the code line
-                output.push_str(&diff_line.content);
-                output.push('\n');
+                writeln!(writer, "{content}", content = diff_line.content)?;
 
                 // Check if there are comments for this line
                 if let Some(line_num) = diff_line.new_line_number
@@ -124,29 +120,29 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
                 {
                     let indentation = get_indentation(&diff_line.content);
                     for comment in comments {
-                        output_comment(
-                            &mut output,
+                        write_comment(
+                            writer,
                             comment,
                             &indentation,
                             comment_prefix,
                             comment_suffix,
-                        )
-                        .expect("infaillable formatting");
+                        )?;
                     }
                 }
             }
 
             // Show ellipsis if content was truncated at end
             if truncated_end {
-                output.push_str("...\n");
+                writeln!(writer, "...")?;
             }
 
             // Close code block for this hunk
-            output.push_str("```\n\n");
+            writeln!(writer, "```")?;
+            writeln!(writer)?;
         }
     }
 
-    output
+    Ok(())
 }
 
 /// Extracts the leading whitespace (indentation) from a line.
@@ -154,61 +150,52 @@ fn get_indentation(line: &str) -> String {
     line.chars().take_while(|c| c.is_whitespace()).collect()
 }
 
-/// Outputs a comment with language-specific comment syntax.
+/// Writes a comment with language-specific comment syntax.
 ///
 /// Formats a comment with the appropriate prefix/suffix for the language,
 /// wrapping it in `<review user="...">` XML tags.
 ///
 /// # Arguments
 ///
-/// * `output` - The string to append the formatted comment to
+/// * `writer` - The writer to output the formatted comment to
 /// * `comment` - The comment to format
 /// * `indentation` - Whitespace to prepend to each line
 /// * `prefix` - Language-specific comment prefix (e.g., "//" or "#")
 /// * `suffix` - Language-specific comment suffix (e.g., " -->" for HTML)
-fn output_comment(
-    output: &mut String,
+fn write_comment(
+    writer: &mut impl Write,
     comment: &Comment,
     indentation: &str,
     prefix: &str,
     suffix: &str,
-) -> std::fmt::Result {
-    use std::fmt::Write;
-
+) -> std::io::Result<()> {
     let user_login = &comment.user.login;
     writeln!(
-        output,
+        writer,
         "{indentation}{prefix} <review user=\"{user_login}\">{suffix}"
     )?;
 
     for line in comment.body.lines() {
         if line.is_empty() {
-            writeln!(output, "{indentation}{prefix}{suffix}")?;
+            writeln!(writer, "{indentation}{prefix}{suffix}")?;
         } else {
-            writeln!(output, "{indentation}{prefix} {line}{suffix}")?;
+            writeln!(writer, "{indentation}{prefix} {line}{suffix}")?;
         }
     }
 
-    writeln!(output, "{indentation}{prefix} </review>{suffix}")
+    writeln!(writer, "{indentation}{prefix} </review>{suffix}")
 }
 
-/// Formats a GitHub issue as markdown.
+/// Writes a GitHub issue as markdown.
 ///
 /// Generates a markdown representation of an issue designed for LLM consumption,
 /// including title, state, author, creation date, labels, and description.
 ///
 /// # Arguments
 ///
+/// * `writer` - The writer to output the formatted markdown to
 /// * `issue` - The issue to format
-///
-/// # Returns
-///
-/// A formatted markdown string
-pub fn write_issue_as_markdown(
-    writer: &mut impl std::io::Write,
-    issue: &Issue,
-) -> std::io::Result<()> {
-    // Title
+pub fn write_issue_as_markdown(writer: &mut impl Write, issue: &Issue) -> std::io::Result<()> {
     writeln!(
         writer,
         "# Issue #{number}: {title}",

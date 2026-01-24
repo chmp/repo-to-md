@@ -10,7 +10,7 @@ use crate::{
         Comment, FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient,
         ListReviewsClient, Review,
     },
-    formatting::format_comments_as_markdown,
+    formatting::write_comments_as_markdown,
     repository::{CheckWorkingDirectory, GetCurrentBranch, GetRepoRoot, GetRepoistoryInfo},
 };
 
@@ -95,8 +95,7 @@ impl ReviewCommand {
             let result = apply_comments_to_files(grouped_comments, &repo_root)?;
             print_apply_result(&result, writer)?;
         } else {
-            let markdown = format_comments_as_markdown(grouped_comments);
-            write!(writer, "{}", markdown)?;
+            write_comments_as_markdown(writer, grouped_comments)?;
         }
 
         Ok(())

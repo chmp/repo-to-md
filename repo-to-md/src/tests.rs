@@ -97,13 +97,15 @@ mod issue_formatting {
 mod integration {
     use crate::{
         cli::review::group_comments_by_file, client::Comment,
-        formatting::format_comments_as_markdown,
+        formatting::write_comments_as_markdown,
     };
 
     fn test_formatting(json: &str, expected: &str) {
         let comments = serde_json::from_str::<Vec<Comment>>(json).expect("Failed to parse JSON");
         let grouped = group_comments_by_file(comments);
-        let output = format_comments_as_markdown(grouped);
+        let mut output = Vec::<u8>::new();
+        write_comments_as_markdown(&mut output, grouped).expect("infallible formatting");
+        let output = String::from_utf8(output).expect("valid utf8");
         assert_eq!(
             output.trim(),
             expected.trim(),
