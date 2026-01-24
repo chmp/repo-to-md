@@ -47,7 +47,7 @@ impl fmt::Display for Truncated<'_> {
     }
 }
 
-/// Applies PR review comments directly to source files as TODO comments.
+/// Applies PR review comments directly to source files
 ///
 /// Comments are inserted after the target line using language-specific comment
 /// syntax, wrapped in `<review user="...">` XML tags.

@@ -34,7 +34,7 @@ pub struct ReviewCommand {
     #[argh(option)]
     pub author: Option<String>,
 
-    /// apply comments directly to source files as TODO comments
+    /// apply comments directly to source files
     #[argh(switch)]
     pub apply: bool,
 
