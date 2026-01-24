@@ -126,7 +126,6 @@ files:
 ```bash
 repo-to-md review --apply              # Apply comments from current branch's PR
 repo-to-md review --pr 78 --apply      # Apply comments from specific PR
-repo-to-md review --apply --force      # Skip uncommitted changes check
 ```
 
 This inserts comments directly into your source files using language-appropriate
@@ -143,6 +142,10 @@ fn main() {
 
 By default, `--apply` refuses to run if you have uncommitted changes (to make it
 easy to revert). Use `--force` to bypass this safety check.
+
+```bash
+repo-to-md review --apply --force      # Skip uncommitted changes check
+```
 
 ### Fetching issues
 

@@ -27,6 +27,8 @@ mod comment_syntax {
 }
 
 mod diff_parsing {
+    use insta::assert_snapshot;
+
     use crate::diff::extract_code_from_diff_hunk;
 
     #[test]
@@ -39,22 +41,9 @@ mod diff_parsing {
 +    pub sanitizer: SanitizerConfig,"#;
 
         let result = extract_code_from_diff_hunk(diff_hunk);
+        let result = result.join("\n");
 
-        assert!(
-            result
-                .iter()
-                .any(|l| l.contains("pub output: Option<PathBuf>"))
-        );
-        assert!(
-            result
-                .iter()
-                .any(|l| l.contains("HTML sanitization configuration"))
-        );
-        assert!(
-            result
-                .iter()
-                .any(|l| l.contains("pub sanitizer: SanitizerConfig"))
-        );
+        assert_snapshot!(result);
     }
 }
 

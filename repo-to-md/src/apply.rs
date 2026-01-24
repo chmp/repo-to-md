@@ -3,6 +3,7 @@ use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::str::Lines;
 use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
@@ -101,7 +102,7 @@ fn apply_comments_to_single_file(
         prefix,
         suffix,
         result,
-    );
+    )?;
 
     if comments_applied_for_file > 0 {
         if original_mtime != get_modification_time(&full_path)? {
@@ -179,16 +180,24 @@ fn insert_comments_into_lines(
     prefix: &str,
     suffix: &str,
     result: &mut ApplyResult,
-) -> usize {
+) -> Result<usize> {
     let mut comments_applied = 0;
 
-    for &(line_num, comment) in applicable_comments {
-        let line_num_usize = line_num as usize;
+    let mut last_line_number = u32::MAX;
+    for &(line_number, comment) in applicable_comments {
+        assert!(
+            line_number <= last_line_number,
+            "comments to apply should be sorted in descending line number order (last: {last_line_number}, current: {line_number})"
+        );
+        last_line_number = line_number;
 
-        if line_num_usize == 0 || line_num_usize > lines.len() {
+        let line_number_usize =
+            usize::try_from(line_number).context("line number does not fit into usize")?;
+
+        if line_number_usize == 0 || line_number_usize > lines.len() {
             eprintln!(
                 "Skipping comment: line {} out of bounds in {} (file has {} lines)",
-                line_num,
+                line_number,
                 file_path,
                 lines.len()
             );
@@ -196,7 +205,7 @@ fn insert_comments_into_lines(
                 path: file_path.to_string(),
                 reason: format!(
                     "Line {} out of bounds (file has {} lines)",
-                    line_num,
+                    line_number,
                     lines.len()
                 ),
                 body_preview: Truncated(&comment.body, 50).to_string(),
@@ -204,31 +213,32 @@ fn insert_comments_into_lines(
             continue;
         }
 
-        let target_line = &lines[line_num_usize - 1];
+        let target_line = &lines[line_number_usize - 1];
 
-        if let Some(expected_line) = get_expected_line_from_diff(&comment.diff_hunk, line_num)
+        if let Some(expected_line) = get_expected_line_from_diff(&comment.diff_hunk, line_number)
             && target_line.trim() != expected_line.trim()
         {
             eprintln!(
                 "Skipping comment: line {} in {} has changed since the review",
-                line_num, file_path
+                line_number, file_path
             );
             result.comments_skipped.push(SkippedComment {
                 path: file_path.to_string(),
-                reason: format!("Line {line_num} content has changed since the review"),
+                reason: format!("Line {line_number} content has changed since the review"),
                 body_preview: Truncated(&comment.body, 50).to_string(),
             });
             continue;
         }
 
         let indentation = get_indentation(target_line);
-        let formatted = format_comment_for_insertion(comment, &indentation, prefix, suffix);
-
-        lines.insert(line_num_usize, formatted);
+        lines.splice(
+            line_number_usize..line_number_usize,
+            format_comment_for_insertion(comment, &indentation, prefix, suffix),
+        );
         comments_applied += 1;
     }
 
-    comments_applied
+    Ok(comments_applied)
 }
 
 fn get_modification_time(path: &Path) -> Result<SystemTime> {
@@ -241,42 +251,91 @@ fn write_file(path: &Path, lines: &[String]) -> Result<()> {
     let mut file = fs::File::create(path)
         .with_context(|| format!("Failed to write file: {}", path.display()))?;
 
-    for (i, line) in lines.iter().enumerate() {
-        if i > 0 {
-            writeln!(file)?;
-        }
-        write!(file, "{}", line)?;
+    for line in lines {
+        writeln!(file, "{}", line)?;
     }
-    writeln!(file)?;
 
     Ok(())
 }
 
 /// Formats a comment for insertion into a source file.
-fn format_comment_for_insertion(
-    comment: &Comment,
-    indentation: &str,
-    prefix: &str,
-    suffix: &str,
-) -> String {
-    let mut output = Vec::new();
+fn format_comment_for_insertion<'a>(
+    comment: &'a Comment,
+    indentation: &'a str,
+    prefix: &'a str,
+    suffix: &'a str,
+) -> FormattedCommentIterator<'a> {
+    FormattedCommentIterator {
+        indentation,
+        prefix,
+        suffix,
+        login: &comment.user.login,
+        lines: comment.body.lines(),
+        state: FormattedCommentIteratorState::Start,
+    }
+}
 
-    output.push(format!(
-        "{}{} <review user=\"{}\">{}",
-        indentation, prefix, comment.user.login, suffix
-    ));
+struct FormattedCommentIterator<'a> {
+    indentation: &'a str,
+    prefix: &'a str,
+    suffix: &'a str,
+    login: &'a str,
+    lines: Lines<'a>,
+    state: FormattedCommentIteratorState,
+}
 
-    for line in comment.body.lines() {
-        if line.is_empty() {
-            output.push(format!("{}{}{}", indentation, prefix, suffix));
-        } else {
-            output.push(format!("{}{} {}{}", indentation, prefix, line, suffix));
-        }
+#[derive(Clone, Copy)]
+enum FormattedCommentIteratorState {
+    Start,
+    Body,
+    End,
+    Done,
+}
+
+impl Iterator for FormattedCommentIterator<'_> {
+    type Item = String;
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (lower, upper) = self.lines.size_hint();
+        (lower + 2, upper.map(|limit| limit + 2))
     }
 
-    output.push(format!("{}{} </review>{}", indentation, prefix, suffix));
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let indentation = self.indentation;
+            let prefix = self.prefix;
+            let suffix = self.suffix;
 
-    output.join("\n")
+            match self.state {
+                FormattedCommentIteratorState::Start => {
+                    self.state = FormattedCommentIteratorState::Body;
+                    return Some(format!(
+                        "{indentation}{prefix} <review user=\"{login}\">{suffix}",
+                        login = self.login
+                    ));
+                }
+                FormattedCommentIteratorState::Body => {
+                    let Some(line) = self.lines.next() else {
+                        self.state = FormattedCommentIteratorState::End;
+                        continue;
+                    };
+                    let space = if !line.is_empty() || !suffix.is_empty() {
+                        " "
+                    } else {
+                        // supress trailing spaces
+                        ""
+                    };
+                    return Some(format!("{indentation}{prefix}{space}{line}{suffix}",));
+                }
+                FormattedCommentIteratorState::End => {
+                    self.state = FormattedCommentIteratorState::Done;
+
+                    return Some(format!("{indentation}{prefix} </review>{suffix}",));
+                }
+                FormattedCommentIteratorState::Done => return None,
+            }
+        }
+    }
 }
 
 fn get_indentation(line: &str) -> String {
@@ -333,14 +392,18 @@ mod tests {
     #[test]
     fn test_format_comment_for_insertion_rust() {
         let comment = create_test_comment("test.rs", Some(10), "Fix this bug", "reviewer");
-        let result = format_comment_for_insertion(&comment, "    ", "//", "");
+        let result = format_comment_for_insertion(&comment, "    ", "//", "")
+            .collect::<Vec<_>>()
+            .join("\n");
         assert_snapshot!(result);
     }
 
     #[test]
     fn test_format_comment_for_insertion_python() {
         let comment = create_test_comment("test.py", Some(10), "Add docstring", "reviewer");
-        let result = format_comment_for_insertion(&comment, "  ", "#", "");
+        let result = format_comment_for_insertion(&comment, "  ", "#", "")
+            .collect::<Vec<_>>()
+            .join("\n");
         assert_snapshot!(result);
     }
 
@@ -348,14 +411,18 @@ mod tests {
     fn test_format_comment_multiline() {
         let comment =
             create_test_comment("test.rs", Some(10), "Line 1\nLine 2\nLine 3", "reviewer");
-        let result = format_comment_for_insertion(&comment, "", "//", "");
+        let result = format_comment_for_insertion(&comment, "", "//", "")
+            .collect::<Vec<_>>()
+            .join("\n");
         assert_snapshot!(result);
     }
 
     #[test]
     fn test_format_comment_html() {
         let comment = create_test_comment("test.html", Some(5), "Add alt text", "reviewer");
-        let result = format_comment_for_insertion(&comment, "  ", "<!--", " -->");
+        let result = format_comment_for_insertion(&comment, "  ", "<!--", " -->")
+            .collect::<Vec<_>>()
+            .join("\n");
         assert_snapshot!(result);
     }
 
