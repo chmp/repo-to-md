@@ -112,7 +112,14 @@ fn apply_comments_to_single_file(
     );
 
     if comments_applied_for_file > 0 {
-        write_file_with_mtime_check(&full_path, &lines, original_mtime)?;
+        if original_mtime != get_modification_time(&full_path)? {
+            bail!(
+                "File {} was modified while processing. Aborting to prevent data loss.",
+                full_path.display()
+            );
+        }
+
+        write_file(&full_path, &lines)?;
         result.files_modified += 1;
         result.comments_applied += comments_applied_for_file;
     }
@@ -214,19 +221,7 @@ fn get_modification_time(path: &Path) -> Result<SystemTime> {
         .with_context(|| format!("Failed to get modification time for {}", path.display()))
 }
 
-fn write_file_with_mtime_check(
-    path: &Path,
-    lines: &[String],
-    original_mtime: SystemTime,
-) -> Result<()> {
-    let current_mtime = get_modification_time(path)?;
-    if current_mtime != original_mtime {
-        bail!(
-            "File {} was modified while processing. Aborting to prevent data loss.",
-            path.display()
-        );
-    }
-
+fn write_file(path: &Path, lines: &[String]) -> Result<()> {
     let mut file = fs::File::create(path)
         .with_context(|| format!("Failed to write file: {}", path.display()))?;
 
