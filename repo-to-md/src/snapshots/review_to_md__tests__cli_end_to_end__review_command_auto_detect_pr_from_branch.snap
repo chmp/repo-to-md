@@ -12,8 +12,8 @@ Please address the following review comments:
 fn main() {
     println!("Hello");
     let x = 42;
-// <review user="reviewer">
-// Auto-detected PR comment
-// </review>
+    // <review user="reviewer">
+    // Auto-detected PR comment
+    // </review>
 }
 ```

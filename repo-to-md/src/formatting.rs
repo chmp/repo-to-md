@@ -103,7 +103,7 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
 
             // Output comments without line numbers at the TOP of the hunk
             for comment in comments_without_line {
-                output_comment(&mut output, comment, comment_prefix, comment_suffix);
+                output_comment(&mut output, comment, "", comment_prefix, comment_suffix);
             }
 
             // Show ellipsis if content was truncated at start
@@ -120,9 +120,17 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
                 // Check if there are comments for this line
                 if let Some(line_num) = diff_line.new_line_number {
                     if let Some(comments) = comments_by_line.get(&line_num) {
+                        // Extract indentation from the code line
+                        let indentation = get_indentation(&diff_line.content);
                         // Output ALL comments for this line
                         for comment in comments {
-                            output_comment(&mut output, comment, comment_prefix, comment_suffix);
+                            output_comment(
+                                &mut output,
+                                comment,
+                                &indentation,
+                                comment_prefix,
+                                comment_suffix,
+                            );
                         }
                     }
                 }
@@ -141,6 +149,11 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
     output
 }
 
+/// Extracts the leading whitespace (indentation) from a line.
+fn get_indentation(line: &str) -> String {
+    line.chars().take_while(|c| c.is_whitespace()).collect()
+}
+
 /// Outputs a comment with language-specific comment syntax.
 ///
 /// Formats a comment with the appropriate prefix/suffix for the language,
@@ -150,24 +163,31 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
 ///
 /// * `output` - The string to append the formatted comment to
 /// * `comment` - The comment to format
+/// * `indentation` - Whitespace to prepend to each line
 /// * `prefix` - Language-specific comment prefix (e.g., "//" or "#")
 /// * `suffix` - Language-specific comment suffix (e.g., " -->" for HTML)
-fn output_comment(output: &mut String, comment: &Comment, prefix: &str, suffix: &str) {
+fn output_comment(
+    output: &mut String,
+    comment: &Comment,
+    indentation: &str,
+    prefix: &str,
+    suffix: &str,
+) {
     output.push_str(&format!(
-        "{} <review user=\"{}\">\n",
-        prefix, comment.user.login
+        "{}{} <review user=\"{}\">{}\n",
+        indentation, prefix, comment.user.login, suffix
     ));
 
     // Handle multi-line comments: each line gets the prefix
     for line in comment.body.lines() {
         if line.is_empty() {
-            output.push_str(&format!("{}\n", prefix));
+            output.push_str(&format!("{}{}{}\n", indentation, prefix, suffix));
         } else {
-            output.push_str(&format!("{} {}\n", prefix, line));
+            output.push_str(&format!("{}{} {}{}\n", indentation, prefix, line, suffix));
         }
     }
 
-    output.push_str(&format!("{} </review>{}\n", prefix, suffix));
+    output.push_str(&format!("{}{} </review>{}\n", indentation, prefix, suffix));
 }
 
 /// Formats a GitHub issue as markdown.

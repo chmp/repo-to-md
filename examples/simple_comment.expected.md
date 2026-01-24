@@ -8,8 +8,8 @@ Please address the following review comments:
 fn main() {
     println!("Hello");
     let x = 42;
-// <review user="reviewer">
-// This should return a Result instead
-// </review>
+    // <review user="reviewer">
+    // This should return a Result instead
+    // </review>
 }
 ```
