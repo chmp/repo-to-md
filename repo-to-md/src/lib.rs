@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod tests;
 
+pub mod apply;
 pub mod cli;
 pub mod client;
 mod diff;
 pub mod formatting;
-mod language;
+pub mod language;
 pub mod repository;

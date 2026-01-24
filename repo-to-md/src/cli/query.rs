@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use anyhow::{bail, ensure, Result};
+use anyhow::{Result, bail, ensure};
 use argh::FromArgs;
 
 use crate::client::{
@@ -23,10 +23,12 @@ pub struct QueryCommand {
 impl QueryCommand {
     pub fn run(
         self,
-        client: &(impl GetCurrentUserClient
-              + FetchReviewCommentsClient
-              + ListReviewsClient
-              + ListPullRequestsClient),
+        client: &(
+             impl GetCurrentUserClient
+             + FetchReviewCommentsClient
+             + ListReviewsClient
+             + ListPullRequestsClient
+         ),
     ) -> Result<()> {
         match self.query.as_str() {
             "GetCurrentUser" => {

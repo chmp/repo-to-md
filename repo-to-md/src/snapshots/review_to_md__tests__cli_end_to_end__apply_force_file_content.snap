@@ -1,0 +1,10 @@
+---
+source: repo-to-md/src/tests.rs
+expression: content
+---
+fn main() {
+    let x = 1;
+    // <review user="reviewer">
+    // Consider renaming x
+    // </review>
+}

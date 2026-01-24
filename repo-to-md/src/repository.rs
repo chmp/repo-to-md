@@ -1,12 +1,15 @@
+use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 /// Mock repository for testing
 pub struct MockRepository {
     owner: String,
     repo: String,
     upstream_branch: String,
+    has_uncommitted_changes: bool,
+    repo_root: PathBuf,
 }
 
 impl MockRepository {
@@ -15,7 +18,19 @@ impl MockRepository {
             owner: owner.to_string(),
             repo: repo.to_string(),
             upstream_branch: upstream_branch.to_string(),
+            has_uncommitted_changes: false,
+            repo_root: PathBuf::from("/mock/repo"),
         }
+    }
+
+    pub fn with_uncommitted_changes(mut self, has_changes: bool) -> Self {
+        self.has_uncommitted_changes = has_changes;
+        self
+    }
+
+    pub fn with_repo_root(mut self, root: PathBuf) -> Self {
+        self.repo_root = root;
+        self
     }
 }
 
@@ -28,6 +43,18 @@ impl GetRepoistoryInfo for MockRepository {
 impl GetCurrentBranch for MockRepository {
     fn get_upstream_branch(&self) -> Result<String> {
         Ok(self.upstream_branch.clone())
+    }
+}
+
+impl CheckWorkingDirectory for MockRepository {
+    fn has_uncommitted_changes(&self) -> Result<bool> {
+        Ok(self.has_uncommitted_changes)
+    }
+}
+
+impl GetRepoRoot for MockRepository {
+    fn get_repo_root(&self) -> Result<PathBuf> {
+        Ok(self.repo_root.clone())
     }
 }
 
@@ -52,6 +79,16 @@ pub trait GetRepoistoryInfo {
 
 pub trait GetCurrentBranch {
     fn get_upstream_branch(&self) -> Result<String>;
+}
+
+/// Checks if the git working directory has uncommitted changes.
+pub trait CheckWorkingDirectory {
+    fn has_uncommitted_changes(&self) -> Result<bool>;
+}
+
+/// Gets the root path of the git repository.
+pub trait GetRepoRoot {
+    fn get_repo_root(&self) -> Result<PathBuf>;
 }
 
 pub struct LocalRepository;
@@ -137,6 +174,43 @@ impl GetCurrentBranch for LocalRepository {
         }
 
         Ok(upstream)
+    }
+}
+
+impl CheckWorkingDirectory for LocalRepository {
+    fn has_uncommitted_changes(&self) -> Result<bool> {
+        let output = Command::new("git")
+            .args(["status", "--porcelain"])
+            .output()
+            .context("Failed to execute git status")?;
+
+        if !output.status.success() {
+            bail!("Failed to check git status");
+        }
+
+        let status =
+            str::from_utf8(&output.stdout).context("Invalid UTF-8 in git status output")?;
+
+        Ok(!status.trim().is_empty())
+    }
+}
+
+impl GetRepoRoot for LocalRepository {
+    fn get_repo_root(&self) -> Result<PathBuf> {
+        let output = Command::new("git")
+            .args(["rev-parse", "--show-toplevel"])
+            .output()
+            .context("Failed to execute git rev-parse")?;
+
+        if !output.status.success() {
+            bail!("Failed to get repository root");
+        }
+
+        let root = str::from_utf8(&output.stdout)
+            .context("Invalid UTF-8 in git rev-parse output")?
+            .trim();
+
+        Ok(PathBuf::from(root))
     }
 }
 

@@ -106,6 +106,17 @@ cargo run -- review --pr <PR_NUMBER> --author @me
 cargo run -- review --pr <PR_NUMBER> --author @me --review -1
 ```
 
+Apply comments directly to source files:
+
+```bash
+cargo run -- review --pr <PR_NUMBER> --apply
+cargo run -- review --pr <PR_NUMBER> --apply --force  # Skip uncommitted changes check
+```
+
+The `--apply` flag inserts review comments directly into the source files using
+`<review>` tags. By default, it refuses to run if there are uncommitted changes
+in the working directory. Use `--force` to bypass this check.
+
 Fetch issues:
 
 ```bash

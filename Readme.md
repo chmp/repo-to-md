@@ -118,6 +118,35 @@ ignored. All filters can be combined, for example
 repo-to-md review --pr 78 --author username --review-index -1  # Last review by 'username' on pr 78
 ```
 
+### Apply mode
+
+Instead of outputting markdown, you can apply review comments directly to source
+files:
+
+```bash
+repo-to-md review --apply              # Apply comments from current branch's PR
+repo-to-md review --pr 78 --apply      # Apply comments from specific PR
+```
+
+This inserts comments directly into your source files using language-appropriate
+comment syntax, wrapped in `<review user="...">` tags:
+
+```rust
+fn main() {
+    let x = 1;
+    // <review user="reviewer">
+    // Consider using a more descriptive name
+    // </review>
+}
+```
+
+By default, `--apply` refuses to run if you have uncommitted changes (to make it
+easy to revert). Use `--force` to bypass this safety check.
+
+```bash
+repo-to-md review --apply --force      # Skip uncommitted changes check
+```
+
 ### Fetching issues
 
 Fetch and format a GitHub issue:

@@ -1,3 +1,7 @@
+---
+source: repo-to-md/src/tests.rs
+expression: output_str
+---
 # Pull Request Review Comments
 
 Please address the following review comments:
@@ -8,8 +12,8 @@ Please address the following review comments:
 fn main() {
     println!("Hello");
     let x = 42;
-    // <review user="reviewer">
-    // This should return a Result instead
+    // <review user="testuser">
+    // My own comment
     // </review>
 }
 ```

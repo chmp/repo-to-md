@@ -1,0 +1,10 @@
+---
+source: repo-to-md/src/tests.rs
+expression: result
+snapshot_kind: text
+---
+     pub output: Option<PathBuf>,
+     pub document_store: ObjectStore,
+     pub object_stores: BTreeMap<String, ObjectStore>,
+    /// HTML sanitization configuration
+    pub sanitizer: SanitizerConfig,

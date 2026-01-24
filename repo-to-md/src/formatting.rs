@@ -1,10 +1,11 @@
+use std::collections::HashMap;
+use std::io::Write;
+
 use crate::client::{Comment, Issue};
-/// Markdown formatting utilities for PR review comments.
 use crate::diff::{calculate_context_range, parse_diff_hunk_with_line_numbers};
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
-use std::collections::HashMap;
 
-/// Formats grouped PR review comments as markdown with inline code blocks.
+/// Writes grouped PR review comments as markdown with inline code blocks.
 ///
 /// This is the core formatting engine that generates markdown output designed for
 /// LLM consumption. For each file:
@@ -20,17 +21,16 @@ use std::collections::HashMap;
 ///
 /// # Arguments
 ///
+/// * `writer` - The writer to output the formatted markdown to
 /// * `grouped_comments` - Comments grouped by file path (from [`group_comments_by_file`])
-///
-/// # Returns
-///
-/// A formatted markdown string with headings, code blocks, and inline comments.
-pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment>>) -> String {
-    let mut output = String::new();
-
-    // Add introduction
-    output.push_str("# Pull Request Review Comments\n\n");
-    output.push_str("Please address the following review comments:\n\n");
+pub fn write_comments_as_markdown(
+    writer: &mut impl Write,
+    grouped_comments: HashMap<String, Vec<Comment>>,
+) -> std::io::Result<()> {
+    writeln!(writer, "# Pull Request Review Comments")?;
+    writeln!(writer)?;
+    writeln!(writer, "Please address the following review comments:")?;
+    writeln!(writer)?;
 
     let mut files: Vec<_> = grouped_comments.keys().collect();
     files.sort();
@@ -89,133 +89,158 @@ pub fn format_comments_as_markdown(grouped_comments: HashMap<String, Vec<Comment
                 let max_line = *line_nums.iter().max().unwrap();
 
                 if min_line == max_line {
-                    output.push_str(&format!("## `{}` - Line {}\n\n", file_path, min_line));
+                    writeln!(writer, "## `{file_path}` - Line {min_line}")?;
                 } else {
-                    output.push_str(&format!(
-                        "## `{}` - Lines {}-{}\n\n",
-                        file_path, min_line, max_line
-                    ));
+                    writeln!(writer, "## `{file_path}` - Lines {min_line}-{max_line}")?;
                 }
+                writeln!(writer)?;
             }
 
             // Open code block for this hunk
-            output.push_str(&format!("```{}\n", language));
+            writeln!(writer, "```{language}")?;
 
             // Output comments without line numbers at the TOP of the hunk
             for comment in comments_without_line {
-                output_comment(&mut output, comment, comment_prefix, comment_suffix);
+                write_comment(writer, comment, "", comment_prefix, comment_suffix)?;
             }
 
             // Show ellipsis if content was truncated at start
             if truncated_start {
-                output.push_str("...\n");
+                writeln!(writer, "...")?;
             }
 
             // Output code with inline comments
             for diff_line in diff_lines {
                 // Output the code line
-                output.push_str(&diff_line.content);
-                output.push('\n');
+                writeln!(writer, "{content}", content = diff_line.content)?;
 
                 // Check if there are comments for this line
-                if let Some(line_num) = diff_line.new_line_number {
-                    if let Some(comments) = comments_by_line.get(&line_num) {
-                        // Output ALL comments for this line
-                        for comment in comments {
-                            output_comment(&mut output, comment, comment_prefix, comment_suffix);
-                        }
+                if let Some(line_num) = diff_line.new_line_number
+                    && let Some(comments) = comments_by_line.get(&line_num)
+                {
+                    let indentation = get_indentation(&diff_line.content);
+                    for comment in comments {
+                        write_comment(
+                            writer,
+                            comment,
+                            &indentation,
+                            comment_prefix,
+                            comment_suffix,
+                        )?;
                     }
                 }
             }
 
             // Show ellipsis if content was truncated at end
             if truncated_end {
-                output.push_str("...\n");
+                writeln!(writer, "...")?;
             }
 
             // Close code block for this hunk
-            output.push_str("```\n\n");
+            writeln!(writer, "```")?;
+            writeln!(writer)?;
         }
     }
 
-    output
+    Ok(())
 }
 
-/// Outputs a comment with language-specific comment syntax.
+/// Extracts the leading whitespace (indentation) from a line.
+fn get_indentation(line: &str) -> String {
+    line.chars().take_while(|c| c.is_whitespace()).collect()
+}
+
+/// Writes a comment with language-specific comment syntax.
 ///
 /// Formats a comment with the appropriate prefix/suffix for the language,
 /// wrapping it in `<review user="...">` XML tags.
 ///
 /// # Arguments
 ///
-/// * `output` - The string to append the formatted comment to
+/// * `writer` - The writer to output the formatted comment to
 /// * `comment` - The comment to format
+/// * `indentation` - Whitespace to prepend to each line
 /// * `prefix` - Language-specific comment prefix (e.g., "//" or "#")
 /// * `suffix` - Language-specific comment suffix (e.g., " -->" for HTML)
-fn output_comment(output: &mut String, comment: &Comment, prefix: &str, suffix: &str) {
-    output.push_str(&format!(
-        "{} <review user=\"{}\">\n",
-        prefix, comment.user.login
-    ));
+fn write_comment(
+    writer: &mut impl Write,
+    comment: &Comment,
+    indentation: &str,
+    prefix: &str,
+    suffix: &str,
+) -> std::io::Result<()> {
+    let user_login = &comment.user.login;
+    writeln!(
+        writer,
+        "{indentation}{prefix} <review user=\"{user_login}\">{suffix}"
+    )?;
 
-    // Handle multi-line comments: each line gets the prefix
     for line in comment.body.lines() {
         if line.is_empty() {
-            output.push_str(&format!("{}\n", prefix));
+            writeln!(writer, "{indentation}{prefix}{suffix}")?;
         } else {
-            output.push_str(&format!("{} {}\n", prefix, line));
+            writeln!(writer, "{indentation}{prefix} {line}{suffix}")?;
         }
     }
 
-    output.push_str(&format!("{} </review>{}\n", prefix, suffix));
+    writeln!(writer, "{indentation}{prefix} </review>{suffix}")
 }
 
-/// Formats a GitHub issue as markdown.
+/// Writes a GitHub issue as markdown.
 ///
 /// Generates a markdown representation of an issue designed for LLM consumption,
 /// including title, state, author, creation date, labels, and description.
 ///
 /// # Arguments
 ///
+/// * `writer` - The writer to output the formatted markdown to
 /// * `issue` - The issue to format
-///
-/// # Returns
-///
-/// A formatted markdown string
-pub fn format_issue_as_markdown(issue: &Issue) -> String {
-    let mut output = String::new();
+pub fn write_issue_as_markdown(writer: &mut impl Write, issue: &Issue) -> std::io::Result<()> {
+    writeln!(
+        writer,
+        "# Issue #{number}: {title}",
+        number = issue.number,
+        title = issue.title,
+    )?;
+    writeln!(writer)?;
 
-    // Title
-    output.push_str(&format!("# Issue #{}: {}\n\n", issue.number, issue.title));
-
-    // Metadata
-    output.push_str(&format!("- **State:** {}\n", issue.state));
+    writeln!(writer, "- **State:** {state}", state = issue.state)?;
 
     if let Some(author) = &issue.author {
-        output.push_str(&format!("- **Author:** @{}\n", author.login));
+        writeln!(writer, "- **Author:** @{login}", login = author.login)?;
     }
 
-    output.push_str(&format!("- **Created:** {}\n", issue.created_at));
+    writeln!(
+        writer,
+        "- **Created:** {created}",
+        created = issue.created_at
+    )?;
 
     if !issue.labels.is_empty() {
-        let label_names: Vec<&str> = issue.labels.iter().map(|l| l.name.as_str()).collect();
-        output.push_str(&format!("- **Labels:** {}\n", label_names.join(", ")));
+        write!(writer, "- **Labels:** ")?;
+        for (idx, label) in issue.labels.iter().enumerate() {
+            if idx != 0 {
+                write!(writer, ", {name}", name = label.name)?;
+            } else {
+                write!(writer, "{name}", name = label.name)?;
+            }
+        }
+        writeln!(writer)?;
     }
 
-    // Description
-    output.push_str("\n## Description\n\n");
-    if let Some(body) = &issue.body {
-        if !body.is_empty() {
-            output.push_str(body);
-            if !body.ends_with('\n') {
-                output.push('\n');
-            }
-        } else {
-            output.push_str("*No description provided.*\n");
+    writeln!(writer)?;
+    writeln!(writer, "## Description")?;
+    writeln!(writer)?;
+    if let Some(body) = &issue.body
+        && !body.is_empty()
+    {
+        write!(writer, "{body}")?;
+        if !body.ends_with('\n') {
+            writeln!(writer)?;
         }
     } else {
-        output.push_str("*No description provided.*\n");
+        writeln!(writer, "*No description provided.*")?;
     }
 
-    output
+    Ok(())
 }

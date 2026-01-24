@@ -40,19 +40,13 @@ pub(crate) fn parse_diff_hunk_with_line_numbers(
     // Parse the @@ header to get the starting line number
     let mut current_new_line: Option<u32> = None;
 
-    if let Some(first_line) = lines.next() {
-        if first_line.starts_with("@@") {
-            // Extract starting line number from header like "@@ -55,6 +59,8 @@"
-            // We need the number after the '+' sign
-            if let Some(plus_pos) = first_line.find('+') {
-                let after_plus = &first_line[plus_pos + 1..];
-                if let Some(comma_or_space) = after_plus.find([',', ' ']) {
-                    if let Ok(line_num) = after_plus[..comma_or_space].parse::<u32>() {
-                        current_new_line = Some(line_num);
-                    }
-                }
-            }
-        }
+    if let Some(first_line) = lines.next()
+        && first_line.starts_with("@@")
+        && let Some((_, after_plus)) = first_line.split_once('+')
+        && let Some(comma_or_space) = after_plus.find([',', ' '])
+        && let Ok(line_num) = after_plus[..comma_or_space].parse::<u32>()
+    {
+        current_new_line = Some(line_num);
     }
 
     // Process each line after the @@ header
