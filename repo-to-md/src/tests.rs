@@ -142,6 +142,51 @@ mod cli_end_to_end {
         },
         repository::MockRepository,
     };
+    use insta::assert_snapshot;
+
+    impl ReviewCommand {
+        fn with_pr(mut self, pr: u32) -> Self {
+            self.pr = Some(pr);
+            self
+        }
+
+        fn with_repo(mut self, repo: &str) -> Self {
+            self.repo = Some(repo.to_string());
+            self
+        }
+
+        fn with_review(mut self, review: &str) -> Self {
+            self.review = Some(review.to_string());
+            self
+        }
+
+        fn with_author(mut self, author: &str) -> Self {
+            self.author = Some(author.to_string());
+            self
+        }
+
+        fn with_apply(mut self) -> Self {
+            self.apply = true;
+            self
+        }
+
+        fn with_force(mut self) -> Self {
+            self.force = true;
+            self
+        }
+    }
+
+    impl IssueCommand {
+        fn with_issue_number(mut self, number: u32) -> Self {
+            self.issue_number = number;
+            self
+        }
+
+        fn with_repo(mut self, repo: &str) -> Self {
+            self.repo = Some(repo.to_string());
+            self
+        }
+    }
 
     #[test]
     fn test_mock_fetch_comments() {
@@ -221,23 +266,16 @@ mod cli_end_to_end {
             );
         let repository = MockRepository::new("owner", "repo", "origin/main");
 
-        let cmd = ReviewCommand {
-            pr: Some(42),
-            repo: Some("owner/repo".to_string()),
-            review: Some("review-123".to_string()),
-            author: None,
-            apply: false,
-            force: false,
-        };
+        let cmd = ReviewCommand::default()
+            .with_pr(42)
+            .with_repo("owner/repo")
+            .with_review("review-123");
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();
 
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("# Pull Request Review Comments"));
-        assert!(output_str.contains("`src/lib.rs`"));
-        assert!(output_str.contains("This should return a Result instead"));
-        assert!(output_str.contains("<review user=\"reviewer\">"));
+        assert_snapshot!(output_str);
     }
 
     #[test]
@@ -264,21 +302,16 @@ mod cli_end_to_end {
             );
         let repository = MockRepository::new("owner", "repo", "origin/main");
 
-        let cmd = ReviewCommand {
-            pr: Some(42),
-            repo: Some("owner/repo".to_string()),
-            review: None,
-            author: Some("alice".to_string()),
-            apply: false,
-            force: false,
-        };
+        let cmd = ReviewCommand::default()
+            .with_pr(42)
+            .with_repo("owner/repo")
+            .with_author("alice");
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();
 
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("Nice work!"));
-        assert!(output_str.contains("<review user=\"alice\">"));
+        assert_snapshot!(output_str);
     }
 
     #[test]
@@ -304,21 +337,16 @@ mod cli_end_to_end {
             );
         let repository = MockRepository::new("owner", "repo", "origin/main");
 
-        let cmd = ReviewCommand {
-            pr: Some(42),
-            repo: Some("owner/repo".to_string()),
-            review: None,
-            author: Some("@me".to_string()),
-            apply: false,
-            force: false,
-        };
+        let cmd = ReviewCommand::default()
+            .with_pr(42)
+            .with_repo("owner/repo")
+            .with_author("@me");
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();
 
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("My own comment"));
-        assert!(output_str.contains("<review user=\"testuser\">"));
+        assert_snapshot!(output_str);
     }
 
     #[test]
@@ -349,20 +377,13 @@ mod cli_end_to_end {
             );
         let repository = MockRepository::new("owner", "repo", "origin/feature-b");
 
-        let cmd = ReviewCommand {
-            pr: None,
-            repo: Some("owner/repo".to_string()),
-            review: None,
-            author: None,
-            apply: false,
-            force: false,
-        };
+        let cmd = ReviewCommand::default().with_repo("owner/repo");
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();
 
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("Auto-detected PR comment"));
+        assert_snapshot!(output_str);
     }
 
     #[test]
@@ -377,21 +398,17 @@ mod cli_end_to_end {
             .with_comments("review-123", []);
         let repository = MockRepository::new("owner", "repo", "origin/main");
 
-        let cmd = ReviewCommand {
-            pr: Some(42),
-            repo: Some("owner/repo".to_string()),
-            review: Some("review-123".to_string()),
-            author: None,
-            apply: false,
-            force: false,
-        };
+        let cmd = ReviewCommand::default()
+            .with_pr(42)
+            .with_repo("owner/repo")
+            .with_review("review-123");
 
         let mut output = Vec::new();
         let result = cmd.run(&client, &repository, &mut output);
 
         assert!(result.is_ok());
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.is_empty());
+        assert_eq!(output_str, "");
     }
 
     #[test]
@@ -412,17 +429,15 @@ mod cli_end_to_end {
         let client = MockGitHubClient::new("testuser").with_issue("owner", "repo", issue);
         let repository = MockRepository::new("owner", "repo", "origin/main");
 
-        let cmd = IssueCommand {
-            issue_number: 42,
-            repo: Some("owner/repo".to_string()),
-        };
+        let cmd = IssueCommand::default()
+            .with_issue_number(42)
+            .with_repo("owner/repo");
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();
 
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("# Issue #42: Fix the bug"));
-        assert!(output_str.contains("This is a bug that needs fixing."));
+        assert_snapshot!(output_str);
     }
 
     #[test]
@@ -443,17 +458,13 @@ mod cli_end_to_end {
         let client = MockGitHubClient::new("testuser").with_issue("auto-owner", "auto-repo", issue);
         let repository = MockRepository::new("auto-owner", "auto-repo", "origin/main");
 
-        let cmd = IssueCommand {
-            issue_number: 99,
-            repo: None,
-        };
+        let cmd = IssueCommand::default().with_issue_number(99);
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();
 
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("# Issue #99: Feature request"));
-        assert!(output_str.contains("Please add this feature."));
+        assert_snapshot!(output_str);
     }
 
     #[test]
@@ -468,14 +479,7 @@ mod cli_end_to_end {
         );
         let repository = MockRepository::new("owner", "repo", "origin/feature-branch");
 
-        let cmd = ReviewCommand {
-            pr: None,
-            repo: Some("owner/repo".to_string()),
-            review: None,
-            author: None,
-            apply: false,
-            force: false,
-        };
+        let cmd = ReviewCommand::default().with_repo("owner/repo");
 
         let mut output = Vec::new();
         let result = cmd.run(&client, &repository, &mut output);
@@ -496,14 +500,7 @@ mod cli_end_to_end {
         );
         let repository = MockRepository::new("owner", "repo", "origin/feature-branch");
 
-        let cmd = ReviewCommand {
-            pr: None,
-            repo: Some("owner/repo".to_string()),
-            review: None,
-            author: None,
-            apply: false,
-            force: false,
-        };
+        let cmd = ReviewCommand::default().with_repo("owner/repo");
 
         let mut output = Vec::new();
         let result = cmd.run(&client, &repository, &mut output);
@@ -534,14 +531,11 @@ mod cli_end_to_end {
         let repository =
             MockRepository::new("owner", "repo", "origin/main").with_uncommitted_changes(true);
 
-        let cmd = ReviewCommand {
-            pr: Some(42),
-            repo: Some("owner/repo".to_string()),
-            review: Some("review-123".to_string()),
-            author: None,
-            apply: true,
-            force: false,
-        };
+        let cmd = ReviewCommand::default()
+            .with_pr(42)
+            .with_repo("owner/repo")
+            .with_review("review-123")
+            .with_apply();
 
         let mut output = Vec::new();
         let result = cmd.run(&client, &repository, &mut output);
@@ -581,25 +575,22 @@ mod cli_end_to_end {
             .with_uncommitted_changes(true)
             .with_repo_root(temp_dir.path().to_path_buf());
 
-        let cmd = ReviewCommand {
-            pr: Some(42),
-            repo: Some("owner/repo".to_string()),
-            review: Some("review-123".to_string()),
-            author: None,
-            apply: true,
-            force: true,
-        };
+        let cmd = ReviewCommand::default()
+            .with_pr(42)
+            .with_repo("owner/repo")
+            .with_review("review-123")
+            .with_apply()
+            .with_force();
 
         let mut output = Vec::new();
         let result = cmd.run(&client, &repository, &mut output);
 
         assert!(result.is_ok());
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("Applied 1 comment(s)"));
+        assert_snapshot!("apply_force_output", output_str);
 
         let content = fs::read_to_string(&file_path).unwrap();
-        assert!(content.contains("TODO: <review"));
-        assert!(content.contains("Consider renaming x"));
+        assert_snapshot!("apply_force_file_content", content);
     }
 
     #[test]
@@ -631,25 +622,19 @@ mod cli_end_to_end {
         let repository = MockRepository::new("owner", "repo", "origin/main")
             .with_repo_root(temp_dir.path().to_path_buf());
 
-        let cmd = ReviewCommand {
-            pr: Some(42),
-            repo: Some("owner/repo".to_string()),
-            review: Some("review-123".to_string()),
-            author: None,
-            apply: true,
-            force: false,
-        };
+        let cmd = ReviewCommand::default()
+            .with_pr(42)
+            .with_repo("owner/repo")
+            .with_review("review-123")
+            .with_apply();
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();
 
         let output_str = String::from_utf8(output).unwrap();
-        assert!(output_str.contains("Applied 1 comment(s)"));
-        assert!(output_str.contains("1 file(s)"));
+        assert_snapshot!("apply_mode_output", output_str);
 
         let content = fs::read_to_string(&file_path).unwrap();
-        assert!(content.contains("// TODO: <review user=\"reviewer\">"));
-        assert!(content.contains("// Add error handling"));
-        assert!(content.contains("// </review>"));
+        assert_snapshot!("apply_mode_file_content", content);
     }
 }

@@ -14,7 +14,7 @@ use crate::{
     repository::{CheckWorkingDirectory, GetCurrentBranch, GetRepoRoot, GetRepoistoryInfo},
 };
 
-#[derive(FromArgs)]
+#[derive(FromArgs, Default)]
 #[argh(subcommand, name = "review")]
 /// Fetch and format PR review comments as markdown
 pub struct ReviewCommand {

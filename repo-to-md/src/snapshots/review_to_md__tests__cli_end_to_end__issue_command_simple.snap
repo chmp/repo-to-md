@@ -1,0 +1,13 @@
+---
+source: repo-to-md/src/tests.rs
+expression: output_str
+---
+# Issue #42: Fix the bug
+
+- **State:** OPEN
+- **Author:** @reporter
+- **Created:** 2024-01-15T10:30:00Z
+
+## Description
+
+This is a bug that needs fixing.

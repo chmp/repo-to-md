@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::time::SystemTime;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::client::Comment;
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
@@ -26,21 +28,37 @@ pub struct SkippedComment {
     pub path: String,
     /// The reason the comment was skipped.
     pub reason: String,
+    /// Preview of the comment body.
+    pub body_preview: String,
+}
+
+/// A wrapper for truncating strings in Display without allocation.
+struct Truncated<'a> {
+    s: &'a str,
+    max_len: usize,
+}
+
+impl<'a> Truncated<'a> {
+    fn new(s: &'a str, max_len: usize) -> Self {
+        Self { s, max_len }
+    }
+}
+
+impl fmt::Display for Truncated<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let first_line = self.s.lines().next().unwrap_or(self.s);
+        if first_line.len() > self.max_len {
+            write!(f, "{}...", &first_line[..self.max_len])
+        } else {
+            write!(f, "{}", first_line)
+        }
+    }
 }
 
 /// Applies PR review comments directly to source files as TODO comments.
 ///
 /// Comments are inserted after the target line using language-specific comment
 /// syntax, wrapped in `<review user="...">` XML tags.
-///
-/// # Arguments
-///
-/// * `comments` - Comments grouped by file path
-/// * `repo_root` - The root path of the repository
-///
-/// # Returns
-///
-/// An `ApplyResult` containing statistics about the operation.
 pub fn apply_comments_to_files(
     comments: HashMap<String, Vec<Comment>>,
     repo_root: &Path,
@@ -48,168 +66,210 @@ pub fn apply_comments_to_files(
     let mut result = ApplyResult::default();
 
     for (file_path, file_comments) in comments {
-        let full_path = repo_root.join(&file_path);
-
-        // Skip if file doesn't exist
-        if !full_path.exists() {
-            for comment in file_comments {
-                result.comments_skipped.push(SkippedComment {
-                    path: file_path.clone(),
-                    reason: "File not found".to_string(),
-                });
-                eprintln!("Skipping comment: file not found: {}", file_path);
-                // Only report once for missing file
-                if comment.line.is_none() {
-                    continue;
-                }
-            }
-            continue;
-        }
-
-        // Read the file
-        let content = fs::read_to_string(&full_path)
-            .with_context(|| format!("Failed to read file: {}", full_path.display()))?;
-        let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-
-        // Filter comments with line numbers and sort descending
-        let mut applicable_comments: Vec<&Comment> = file_comments
-            .iter()
-            .filter(|c| {
-                if c.line.is_none() {
-                    result.comments_skipped.push(SkippedComment {
-                        path: file_path.clone(),
-                        reason: "Comment has no line number".to_string(),
-                    });
-                    eprintln!(
-                        "Skipping comment without line number in {}: {}",
-                        file_path,
-                        truncate_body(&c.body, 50)
-                    );
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
-
-        if applicable_comments.is_empty() {
-            continue;
-        }
-
-        // Sort by line number descending (insert from bottom to top)
-        applicable_comments.sort_by(|a, b| b.line.unwrap().cmp(&a.line.unwrap()));
-
-        let language = detect_language(&file_path);
-        let prefix = get_comment_prefix(language);
-        let suffix = get_comment_suffix(language);
-
-        let mut comments_applied_for_file = 0;
-
-        for comment in applicable_comments {
-            let line_num = comment.line.unwrap() as usize;
-
-            // Check bounds
-            if line_num == 0 || line_num > lines.len() {
-                result.comments_skipped.push(SkippedComment {
-                    path: file_path.clone(),
-                    reason: format!(
-                        "Line {} out of bounds (file has {} lines)",
-                        line_num,
-                        lines.len()
-                    ),
-                });
-                eprintln!(
-                    "Skipping comment: line {} out of bounds in {} (file has {} lines)",
-                    line_num,
-                    file_path,
-                    lines.len()
-                );
-                continue;
-            }
-
-            // Get indentation from target line
-            let target_line = &lines[line_num - 1];
-            let indentation = get_indentation(target_line);
-
-            // Format the comment
-            let formatted = format_comment_for_insertion(comment, &indentation, prefix, suffix);
-
-            // Insert after the target line
-            lines.insert(line_num, formatted);
-            comments_applied_for_file += 1;
-        }
-
-        if comments_applied_for_file > 0 {
-            // Write the modified content back
-            let mut file = fs::File::create(&full_path)
-                .with_context(|| format!("Failed to write file: {}", full_path.display()))?;
-            for (i, line) in lines.iter().enumerate() {
-                if i > 0 {
-                    writeln!(file)?;
-                }
-                write!(file, "{}", line)?;
-            }
-            // Ensure file ends with newline
-            writeln!(file)?;
-
-            result.files_modified += 1;
-            result.comments_applied += comments_applied_for_file;
-        }
+        apply_comments_to_single_file(&file_path, file_comments, repo_root, &mut result)?;
     }
 
     Ok(result)
 }
 
+fn apply_comments_to_single_file(
+    file_path: &str,
+    file_comments: Vec<Comment>,
+    repo_root: &Path,
+    result: &mut ApplyResult,
+) -> Result<()> {
+    let full_path = repo_root.join(file_path);
+
+    if !full_path.exists() {
+        skip_comments_for_missing_file(file_path, &file_comments, result);
+        return Ok(());
+    }
+
+    eprintln!("Applying comments to {}", file_path);
+
+    let original_mtime = get_modification_time(&full_path)?;
+    let content = fs::read_to_string(&full_path)
+        .with_context(|| format!("Failed to read file: {}", full_path.display()))?;
+    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+
+    let applicable_comments = filter_applicable_comments(file_path, &file_comments, result);
+
+    if applicable_comments.is_empty() {
+        return Ok(());
+    }
+
+    let language = detect_language(file_path);
+    let prefix = get_comment_prefix(language);
+    let suffix = get_comment_suffix(language);
+
+    let comments_applied_for_file = insert_comments_into_lines(
+        &mut lines,
+        &applicable_comments,
+        file_path,
+        prefix,
+        suffix,
+        result,
+    );
+
+    if comments_applied_for_file > 0 {
+        write_file_with_mtime_check(&full_path, &lines, original_mtime)?;
+        result.files_modified += 1;
+        result.comments_applied += comments_applied_for_file;
+    }
+
+    Ok(())
+}
+
+fn skip_comments_for_missing_file(
+    file_path: &str,
+    file_comments: &[Comment],
+    result: &mut ApplyResult,
+) {
+    eprintln!("Skipping file (not found): {}", file_path);
+    for comment in file_comments {
+        result.comments_skipped.push(SkippedComment {
+            path: file_path.to_string(),
+            reason: "File not found".to_string(),
+            body_preview: Truncated::new(&comment.body, 50).to_string(),
+        });
+    }
+}
+
+fn filter_applicable_comments<'a>(
+    file_path: &str,
+    file_comments: &'a [Comment],
+    result: &mut ApplyResult,
+) -> Vec<(u32, &'a Comment)> {
+    let mut applicable: Vec<(u32, &Comment)> = Vec::new();
+
+    for comment in file_comments {
+        match comment.line {
+            Some(line) => applicable.push((line, comment)),
+            None => {
+                eprintln!(
+                    "Skipping comment without line number in {}: {}",
+                    file_path,
+                    Truncated::new(&comment.body, 50)
+                );
+                result.comments_skipped.push(SkippedComment {
+                    path: file_path.to_string(),
+                    reason: "Comment has no line number".to_string(),
+                    body_preview: Truncated::new(&comment.body, 50).to_string(),
+                });
+            }
+        }
+    }
+
+    // Sort by line number descending (insert from bottom to top)
+    applicable.sort_by(|a, b| b.0.cmp(&a.0));
+    applicable
+}
+
+fn insert_comments_into_lines(
+    lines: &mut Vec<String>,
+    applicable_comments: &[(u32, &Comment)],
+    file_path: &str,
+    prefix: &str,
+    suffix: &str,
+    result: &mut ApplyResult,
+) -> usize {
+    let mut comments_applied = 0;
+
+    for &(line_num, comment) in applicable_comments {
+        let line_num_usize = line_num as usize;
+
+        if line_num_usize == 0 || line_num_usize > lines.len() {
+            eprintln!(
+                "Skipping comment: line {} out of bounds in {} (file has {} lines)",
+                line_num,
+                file_path,
+                lines.len()
+            );
+            result.comments_skipped.push(SkippedComment {
+                path: file_path.to_string(),
+                reason: format!(
+                    "Line {} out of bounds (file has {} lines)",
+                    line_num,
+                    lines.len()
+                ),
+                body_preview: Truncated::new(&comment.body, 50).to_string(),
+            });
+            continue;
+        }
+
+        let target_line = &lines[line_num_usize - 1];
+        let indentation = get_indentation(target_line);
+        let formatted = format_comment_for_insertion(comment, &indentation, prefix, suffix);
+
+        lines.insert(line_num_usize, formatted);
+        comments_applied += 1;
+    }
+
+    comments_applied
+}
+
+fn get_modification_time(path: &Path) -> Result<SystemTime> {
+    fs::metadata(path)
+        .and_then(|m| m.modified())
+        .with_context(|| format!("Failed to get modification time for {}", path.display()))
+}
+
+fn write_file_with_mtime_check(
+    path: &Path,
+    lines: &[String],
+    original_mtime: SystemTime,
+) -> Result<()> {
+    let current_mtime = get_modification_time(path)?;
+    if current_mtime != original_mtime {
+        bail!(
+            "File {} was modified while processing. Aborting to prevent data loss.",
+            path.display()
+        );
+    }
+
+    let mut file = fs::File::create(path)
+        .with_context(|| format!("Failed to write file: {}", path.display()))?;
+
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 {
+            writeln!(file)?;
+        }
+        write!(file, "{}", line)?;
+    }
+    writeln!(file)?;
+
+    Ok(())
+}
+
 /// Formats a comment for insertion into a source file.
-///
-/// The comment is formatted as:
-/// ```text
-/// {indent}{prefix} TODO: <review user="{user}">{suffix}
-/// {indent}{prefix} {comment_line_1}{suffix}
-/// {indent}{prefix} </review>{suffix}
-/// ```
 fn format_comment_for_insertion(
     comment: &Comment,
     indentation: &str,
     prefix: &str,
     suffix: &str,
 ) -> String {
-    let mut lines = Vec::new();
+    let mut output = Vec::new();
 
-    // Opening tag with TODO
-    lines.push(format!(
-        "{}{} TODO: <review user=\"{}\">{}",
+    output.push(format!(
+        "{}{} <review user=\"{}\">{}",
         indentation, prefix, comment.user.login, suffix
     ));
 
-    // Comment body lines
     for line in comment.body.lines() {
         if line.is_empty() {
-            lines.push(format!("{}{}{}", indentation, prefix, suffix));
+            output.push(format!("{}{}{}", indentation, prefix, suffix));
         } else {
-            lines.push(format!("{}{} {}{}", indentation, prefix, line, suffix));
+            output.push(format!("{}{} {}{}", indentation, prefix, line, suffix));
         }
     }
 
-    // Closing tag
-    lines.push(format!("{}{} </review>{}", indentation, prefix, suffix));
+    output.push(format!("{}{} </review>{}", indentation, prefix, suffix));
 
-    lines.join("\n")
+    output.join("\n")
 }
 
-/// Extracts the leading whitespace (indentation) from a line.
 fn get_indentation(line: &str) -> String {
     line.chars().take_while(|c| c.is_whitespace()).collect()
-}
-
-/// Truncates a string to a maximum length, adding "..." if truncated.
-fn truncate_body(s: &str, max_len: usize) -> String {
-    let first_line = s.lines().next().unwrap_or(s);
-    if first_line.len() > max_len {
-        format!("{}...", &first_line[..max_len])
-    } else {
-        first_line.to_string()
-    }
 }
 
 /// Prints the result of applying comments to files.
@@ -221,11 +281,19 @@ pub fn print_apply_result(result: &ApplyResult, writer: &mut impl Write) -> Resu
     )?;
 
     if !result.comments_skipped.is_empty() {
+        writeln!(writer)?;
         writeln!(
             writer,
-            "Skipped {} comment(s)",
+            "Skipped {} comment(s):",
             result.comments_skipped.len()
         )?;
+        for skipped in &result.comments_skipped {
+            writeln!(
+                writer,
+                "  - {}: {} ({})",
+                skipped.path, skipped.reason, skipped.body_preview
+            )?;
+        }
     }
 
     Ok(())
@@ -235,6 +303,7 @@ pub fn print_apply_result(result: &ApplyResult, writer: &mut impl Write) -> Resu
 mod tests {
     use super::*;
     use crate::client::User;
+    use insta::assert_snapshot;
     use std::fs;
     use tempfile::TempDir;
 
@@ -254,20 +323,14 @@ mod tests {
     fn test_format_comment_for_insertion_rust() {
         let comment = create_test_comment("test.rs", Some(10), "Fix this bug", "reviewer");
         let result = format_comment_for_insertion(&comment, "    ", "//", "");
-
-        assert!(result.contains("    // TODO: <review user=\"reviewer\">"));
-        assert!(result.contains("    // Fix this bug"));
-        assert!(result.contains("    // </review>"));
+        assert_snapshot!(result);
     }
 
     #[test]
     fn test_format_comment_for_insertion_python() {
         let comment = create_test_comment("test.py", Some(10), "Add docstring", "reviewer");
         let result = format_comment_for_insertion(&comment, "  ", "#", "");
-
-        assert!(result.contains("  # TODO: <review user=\"reviewer\">"));
-        assert!(result.contains("  # Add docstring"));
-        assert!(result.contains("  # </review>"));
+        assert_snapshot!(result);
     }
 
     #[test]
@@ -275,14 +338,14 @@ mod tests {
         let comment =
             create_test_comment("test.rs", Some(10), "Line 1\nLine 2\nLine 3", "reviewer");
         let result = format_comment_for_insertion(&comment, "", "//", "");
+        assert_snapshot!(result);
+    }
 
-        let lines: Vec<&str> = result.lines().collect();
-        assert_eq!(lines.len(), 5);
-        assert!(lines[0].contains("TODO: <review"));
-        assert!(lines[1].contains("Line 1"));
-        assert!(lines[2].contains("Line 2"));
-        assert!(lines[3].contains("Line 3"));
-        assert!(lines[4].contains("</review>"));
+    #[test]
+    fn test_format_comment_html() {
+        let comment = create_test_comment("test.html", Some(5), "Add alt text", "reviewer");
+        let result = format_comment_for_insertion(&comment, "  ", "<!--", " -->");
+        assert_snapshot!(result);
     }
 
     #[test]
@@ -291,6 +354,27 @@ mod tests {
         assert_eq!(get_indentation("\t\tcode"), "\t\t");
         assert_eq!(get_indentation("code"), "");
         assert_eq!(get_indentation("  \t  code"), "  \t  ");
+    }
+
+    #[test]
+    fn test_truncated_display_short() {
+        let result = format!("{}", Truncated::new("short text", 50));
+        assert_eq!(result, "short text");
+    }
+
+    #[test]
+    fn test_truncated_display_long() {
+        let result = format!(
+            "{}",
+            Truncated::new("this is a very long text that exceeds the limit", 20)
+        );
+        assert_eq!(result, "this is a very long ...");
+    }
+
+    #[test]
+    fn test_truncated_display_multiline() {
+        let result = format!("{}", Truncated::new("first line\nsecond line", 50));
+        assert_eq!(result, "first line");
     }
 
     #[test]
@@ -316,8 +400,7 @@ mod tests {
         assert_eq!(result.comments_applied, 1);
 
         let content = fs::read_to_string(&file_path).unwrap();
-        assert!(content.contains("    // TODO: <review"));
-        assert!(content.contains("    // Consider renaming"));
+        assert_snapshot!(content);
     }
 
     #[test]
@@ -341,13 +424,7 @@ mod tests {
         assert_eq!(result.comments_applied, 2);
 
         let content = fs::read_to_string(&file_path).unwrap();
-        assert!(content.contains("Comment on line 1"));
-        assert!(content.contains("Comment on line 3"));
-
-        // Verify order is preserved (line 1 content comes before line 3 content)
-        let pos1 = content.find("line 1").unwrap();
-        let pos3 = content.find("line 3").unwrap();
-        assert!(pos1 < pos3);
+        assert_snapshot!(content);
     }
 
     #[test]
@@ -368,7 +445,8 @@ mod tests {
 
         assert_eq!(result.files_modified, 0);
         assert_eq!(result.comments_applied, 0);
-        assert!(!result.comments_skipped.is_empty());
+        assert_eq!(result.comments_skipped.len(), 1);
+        assert_eq!(result.comments_skipped[0].reason, "File not found");
     }
 
     #[test]
@@ -393,7 +471,10 @@ mod tests {
         assert_eq!(result.files_modified, 0);
         assert_eq!(result.comments_applied, 0);
         assert_eq!(result.comments_skipped.len(), 1);
-        assert!(result.comments_skipped[0].reason.contains("no line number"));
+        assert_eq!(
+            result.comments_skipped[0].reason,
+            "Comment has no line number"
+        );
     }
 
     #[test]
@@ -419,5 +500,44 @@ mod tests {
         assert_eq!(result.comments_applied, 0);
         assert_eq!(result.comments_skipped.len(), 1);
         assert!(result.comments_skipped[0].reason.contains("out of bounds"));
+    }
+
+    #[test]
+    fn test_print_apply_result_with_skipped() {
+        let result = ApplyResult {
+            files_modified: 2,
+            comments_applied: 5,
+            comments_skipped: vec![
+                SkippedComment {
+                    path: "missing.rs".to_string(),
+                    reason: "File not found".to_string(),
+                    body_preview: "Some comment".to_string(),
+                },
+                SkippedComment {
+                    path: "test.rs".to_string(),
+                    reason: "Line 100 out of bounds".to_string(),
+                    body_preview: "Another comment".to_string(),
+                },
+            ],
+        };
+
+        let mut output = Vec::new();
+        print_apply_result(&result, &mut output).unwrap();
+        let output_str = String::from_utf8(output).unwrap();
+        assert_snapshot!(output_str);
+    }
+
+    #[test]
+    fn test_print_apply_result_no_skipped() {
+        let result = ApplyResult {
+            files_modified: 1,
+            comments_applied: 3,
+            comments_skipped: vec![],
+        };
+
+        let mut output = Vec::new();
+        print_apply_result(&result, &mut output).unwrap();
+        let output_str = String::from_utf8(output).unwrap();
+        assert_snapshot!(output_str);
     }
 }

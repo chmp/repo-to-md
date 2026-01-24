@@ -7,7 +7,7 @@ use crate::{
     client::FetchIssueClient, formatting::format_issue_as_markdown, repository::GetRepoistoryInfo,
 };
 
-#[derive(FromArgs)]
+#[derive(FromArgs, Default)]
 #[argh(subcommand, name = "issue")]
 /// Fetch and format GitHub issue as markdown
 pub struct IssueCommand {

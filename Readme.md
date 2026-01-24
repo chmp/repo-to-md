@@ -121,7 +121,7 @@ repo-to-md review --pr 78 --author username --review-index -1  # Last review by 
 ### Apply mode
 
 Instead of outputting markdown, you can apply review comments directly to source
-files as TODO comments:
+files:
 
 ```bash
 repo-to-md review --apply              # Apply comments from current branch's PR
@@ -135,7 +135,7 @@ comment syntax, wrapped in `<review user="...">` tags:
 ```rust
 fn main() {
     let x = 1;
-    // TODO: <review user="reviewer">
+    // <review user="reviewer">
     // Consider using a more descriptive name
     // </review>
 }

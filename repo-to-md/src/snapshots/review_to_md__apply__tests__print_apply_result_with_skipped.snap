@@ -1,0 +1,9 @@
+---
+source: repo-to-md/src/apply.rs
+expression: output_str
+---
+Applied 5 comment(s) to 2 file(s)
+
+Skipped 2 comment(s):
+  - missing.rs: File not found (Some comment)
+  - test.rs: Line 100 out of bounds (Another comment)

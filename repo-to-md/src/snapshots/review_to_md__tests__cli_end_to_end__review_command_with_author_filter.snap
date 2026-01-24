@@ -1,0 +1,19 @@
+---
+source: repo-to-md/src/tests.rs
+expression: output_str
+---
+# Pull Request Review Comments
+
+Please address the following review comments:
+
+## `src/main.rs` - Lines 8-11
+
+```rust
+fn main() {
+    println!("Hello");
+    let x = 42;
+// <review user="alice">
+// Nice work!
+// </review>
+}
+```
