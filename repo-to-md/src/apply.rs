@@ -338,6 +338,7 @@ impl Iterator for FormattedCommentIterator<'_> {
     }
 }
 
+// NOTE: at the call site the indent must be allocated in any case as the lines are mutated
 fn get_indentation(line: &str) -> String {
     line.chars().take_while(|c| c.is_whitespace()).collect()
 }
