@@ -82,6 +82,9 @@ Binary location: `target/release/repo-to-md` (or `repo-to-md.exe` on Windows)
 
 ### Run
 
+This section describes the functionality of CLI. Do not run these commands,
+unless explicitly prompted.
+
 Fetch comments with interactive review selection:
 
 ```bash
@@ -122,6 +125,46 @@ Fetch issues:
 ```bash
 cargo run -- issue <ISSUE_NUMBER>
 cargo run -- issue <ISSUE_NUMBER> --repo <OWNER/REPO>
+```
+
+Review local changes with web UI:
+
+```bash
+cargo run -- local review                    # Auto-detect base, review commits up to HEAD
+cargo run -- local review main               # Review commits from main to HEAD
+cargo run -- local review main feature       # Review commits from main to feature
+cargo run -- local review HEAD~5 HEAD~2      # Review specific commit range
+cargo run -- local review main --no-open     # Don't open browser automatically
+cargo run -- local review --force            # Force regeneration even with uncommitted changes
+```
+
+The `local review` command launches a local web server with a side-by-side diff
+viewer for reviewing a range of commits before merge. It takes a base ref (first
+argument) and an optional end ref (second argument, defaults to HEAD). When no
+arguments are provided, it auto-detects the base branch (trying origin/HEAD,
+main, then master).
+
+The command refuses to start if:
+- There are uncommitted changes and reviewing HEAD (use `--force` to override)
+- The session file exists but has changed commits/refs (use `--force` to regenerate)
+- No commits exist in the range
+
+Comments are saved to `review-comments.json` by default (use `-o` to change).
+Browser opens automatically by default (use `--no-open` to disable). The session
+file tracks commits so reopening detects if the branch has changed.
+
+The server can be stopped by:
+- Pressing Ctrl-C in the terminal
+- Clicking the "Stop Server" button in the web UI
+
+On shutdown, the server prints the `local format` command to run next.
+
+Format comments as markdown:
+
+```bash
+cargo run -- local format                           # Format default file to stdout
+cargo run -- local format review-comments.json      # Format specific file to stdout
+cargo run -- local format -o out.md                 # Format to file
 ```
 
 ### Install skill
@@ -188,12 +231,28 @@ repo-to-md/src/
 ├── formatting.rs       - Markdown formatting logic
 ├── diff.rs             - Diff parsing utilities
 ├── language.rs         - Language detection and comment syntax
-└── tests.rs            - Test suite
+├── tests.rs            - Test suite
+└── static/             - Frontend assets for local review UI
+    ├── index.html      - Main UI page
+    ├── test.html       - Frontend test runner
+    ├── styles.css      - Stylesheet
+    └── js/
+        ├── api.js          - API client for backend communication
+        ├── app.js          - Main application coordinator
+        ├── utils.js        - Shared pure utility functions
+        ├── diff-view.js    - <diff-view> custom element
+        ├── file-tree.js    - <file-tree> custom element
+        ├── comment-form.js - <comment-form> custom element
+        ├── review-comment.js - <review-comment> custom element
+        └── test/
+            ├── minitest.js      - Test framework
+            ├── utils.test.js    - Pure function tests
+            └── components.test.js - DOM component tests
 
 examples/               - Test fixtures with JSON inputs and expected markdown outputs
 ```
 
-**Module responsibilities:**
+**Rust module responsibilities:**
 
 - **main.rs** - Entry point, invokes CLI from lib
 - **cli/** - Command implementations using argh for argument parsing
@@ -209,6 +268,19 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
 - **language.rs** - Detects languages from file extensions, provides comment
   syntax
 - **lib.rs** - Public API, re-exports key functions and types
+
+**Frontend module responsibilities** (in `static/js/`):
+
+- **api.js** - HTTP client for backend API (fetch session, CRUD comments)
+- **app.js** - Main coordinator, event handling, state management
+- **utils.js** - Pure utility functions extracted for testability:
+  - `escapeHtml`, `escapeAttr` - XSS prevention
+  - `getRowType`, `groupCommentsByLine`, `getCommentsByFile` - Data transforms
+  - `getFileName`, `formatDate` - String/date utilities
+- **diff-view.js** - Side-by-side diff display with inline comments
+- **file-tree.js** - File list with status icons and comment counts
+- **comment-form.js** - New comment input form
+- **review-comment.js** - Comment display with edit/delete actions
 
 ### Key components
 
@@ -234,7 +306,8 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
   - `FetchReviewCommentsClient` - Fetch comments from a review
   - `ListPullRequestsClient` - List open pull requests
   - `FetchIssueClient` - Fetch a single issue
-- **Data types** (traits.rs): `Review`, `Comment`, `Issue`, `PullRequest`, `User`
+- **Data types** (traits.rs): `Review`, `Comment`, `Issue`, `PullRequest`,
+  `User`
 - **GithubClient** (github.rs) - Real implementation using `gh api graphql`
 - **MockGitHubClient** (mock.rs) - Test double with builder pattern:
   - `with_reviews()`, `with_comments()`, `with_issue()`, `with_pull_requests()`
@@ -257,7 +330,7 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
   - Applies truncation for large diffs (shows CONTEXT_LINES=5 before/after
     commented lines)
   - Generates markdown with language-specific comment syntax
-  - Embeds comments as `<review user="...">...</review>` XML tags
+  - Embeds comments as `<review>...</review>` XML tags
 
 **Diff parsing (diff.rs):**
 
@@ -285,7 +358,7 @@ Comments are formatted as:
 
 ```rust
 code line
-// <review user="username">
+// <review>
 // Comment text here
 // Multi-line comments get prefix on each line
 // </review>
@@ -300,13 +373,25 @@ Tests use example JSON files in `examples/` with corresponding `.expected.md`
 files. The `test_formatting()` helper compares actual output against expected
 output.
 
-**Running tests:**
+**Running Rust tests:**
 
 ```bash
 cargo test
 ```
 
-**Test modules:**
+**Running frontend tests:**
+
+Frontend tests run in the browser using the minitest.js framework. To run them:
+
+1. Start the local server: `cargo run -- local review HEAD~1`
+2. Navigate to `http://localhost:PORT/test.html` (replace PORT with actual port)
+3. Open browser developer tools (F12) and check the Console tab
+4. Green = passed, Red = failed
+
+Alternatively, open `repo-to-md/src/static/test.html` directly in a browser (some
+tests may fail due to module loading restrictions without a server).
+
+**Rust test modules:**
 
 - `tests::language_detection` - Language detection from file extensions
 - `tests::comment_syntax` - Comment prefix/suffix for different languages
@@ -319,8 +404,22 @@ cargo test
   - Issue command with repo auto-detection
   - PR auto-detection from current branch
 
+**Frontend test modules** (in `repo-to-md/src/static/js/test/`):
+
+- `utils.test.js` - Tests for pure utility functions:
+  - `escapeHtml`, `escapeAttr` - XSS prevention (security critical)
+  - `getRowType` - Diff row classification
+  - `groupCommentsByLine`, `getCommentsByFile` - Comment grouping
+  - `getFileName`, `formatDate` - String/date utilities
+- `components.test.js` - DOM-based tests for custom elements:
+  - `CommentForm` - Submit, cancel, keyboard shortcuts
+  - `ReviewComment` - Edit, save, delete, XSS escaping
+
 **Testing approach:**
 
+- **Prefer snapshot tests** using `insta` for complex output verification
+- Use `insta::assert_snapshot!()` instead of multiple `assert!(contains())`
+- Run `cargo insta review` to approve new snapshots
 - Use `MockGitHubClient` and `MockRepository` for isolated CLI tests
 - Commands provide `run_with_writer()` method to capture output for testing
 - Test main output (stdout) but not user-directed logs (eprintln)
@@ -371,6 +470,85 @@ When modifying the public CLI interface (adding/removing/changing flags):
 3. Update help text in argh derive attributes
 4. Add tests if the change affects behavior
 
+### Keeping CLAUDE.md current
+
+Always update CLAUDE.md when making changes that affect:
+
+- **CLI interface** - New commands, changed flags, renamed subcommands
+- **Project structure** - New modules, reorganized directories, moved files
+- **Build/test commands** - Changed cargo commands, new test patterns
+- **Key architectural decisions** - New patterns, changed data flow
+
+CLAUDE.md serves as the primary reference for AI assistants working with this
+codebase. Outdated documentation leads to incorrect assumptions and wasted
+effort.
+
+### Error handling and unwrap
+
+Never use `.unwrap()` in non-test code. Instead:
+
+1. **For fallible operations**: Propagate errors with `?` or handle with
+   `match`/`if let`
+
+   ```rust
+   // Preferred: propagate error
+   let file = File::open(path)?;
+
+   // Preferred: handle error explicitly
+   let file = match File::open(path) {
+       Ok(f) => f,
+       Err(e) => return Err(e.into()),
+   };
+   ```
+
+2. **For infallible operations** (e.g., accessing non-empty collections after a
+   check): Use `let ... else { unreachable!() }`
+
+   ```rust
+   if !items.is_empty() {
+       let Some(first) = items.first() else {
+           unreachable!("items is non-empty");
+       };
+       // use first
+   }
+   ```
+
+3. **For lock poisoning** (RwLock/Mutex): Use `.expect("lock poisoned")` since
+   poisoned locks indicate a panic elsewhere and cannot be meaningfully
+   recovered
+
+   ```rust
+   let guard = self.data.read().expect("lock poisoned");
+   ```
+
+4. **In tests**: `.unwrap()` is acceptable since test failures are expected to
+   panic
+
+### Format macro style
+
+Use named arguments in format-style macros for clarity. This applies to:
+`format!`, `println!`, `eprintln!`, `print!`, `eprint!`, `write!`, `writeln!`,
+`bail!`, `anyhow!`, and similar macros.
+
+```rust
+// Preferred: named arguments
+eprintln!("Processing {file} on line {line}", file = path, line = num);
+format!("Error: {message}", message = err);
+bail!("Failed to open {path}: {error}", path = file_path, error = e);
+
+// Avoid: positional arguments
+eprintln!("Processing {} on line {}", path, num);
+format!("Error: {}", err);
+bail!("Failed to open {}: {}", file_path, e);
+```
+
+For simple single-variable cases, inline capture is acceptable:
+
+```rust
+let name = "test";
+println!("Hello {name}");  // OK - single variable, inline capture
+```
+
 ## Documentation Style Guidelines
 
 ### Heading capitalization
@@ -399,6 +577,11 @@ complete documentation on creating and using skills:
 
 - **Global skills**: `~/.claude/skills/` - Available across all projects
 - **Project skills**: `.claude/skills/` - Shared with team, version controlled
+
+**Important**: The `skills/` directory at the repo root contains the source
+skill files. The `.claude/skills/` directory contains installed copies generated
+by `repo-to-md install --local`. Always edit skills in `skills/`, never in
+`.claude/skills/` directly.
 
 ### repo-to-md skill
 

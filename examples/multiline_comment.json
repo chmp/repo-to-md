@@ -1,9 +1,0 @@
-[
-  {
-    "path": "src/handler.rs",
-    "line": 24,
-    "body": "This function is doing too much.\n\nConsider splitting into:\n1. Validation logic\n2. Business logic\n3. Response formatting",
-    "diff_hunk": "@@ -22,4 +22,5 @@\n fn handle_request(req: Request) -> Response {\n     let data = parse(req);\n+    let result = process(data);\n     Ok(result)\n }\n",
-    "user": {"login": "architect"}
-  }
-]

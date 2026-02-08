@@ -29,7 +29,7 @@ mod comment_syntax {
 mod diff_parsing {
     use insta::assert_snapshot;
 
-    use crate::diff::extract_code_from_diff_hunk;
+    use crate::diff::{SideBySideDiff, extract_code_from_diff_hunk};
 
     #[test]
     fn test_extract_code_from_diff_hunk() {
@@ -45,91 +45,244 @@ mod diff_parsing {
 
         assert_snapshot!(result);
     }
+
+    #[test]
+    fn test_to_unified_roundtrip() {
+        let diff_text = r#"diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -8,4 +8,6 @@ fn example() {
+ fn main() {
+     println!("Hello");
++    let x = 42;
++    let y = 100;
+ }
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text);
+        assert_eq!(parsed.files.len(), 1);
+        assert_eq!(parsed.files[0].hunks.len(), 1);
+
+        let unified = parsed.files[0].hunks[0].to_unified();
+        assert_snapshot!(unified);
+    }
+
+    #[test]
+    fn test_full_export_flow() {
+        use crate::client::{Comment, User};
+        use crate::formatting::write_comments_as_markdown;
+        use std::collections::HashMap;
+
+        let diff_text = r#"diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -8,4 +8,6 @@ fn example() {
+ fn main() {
+     println!("Hello");
++    let x = 42;
++    let y = 100;
+ }
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text);
+        let unified = parsed.files[0].hunks[0].to_unified();
+
+        let comment = Comment {
+            id: String::new(),
+            path: "src/lib.rs".to_string(),
+            line: Some(10),
+            body: "Consider using a constant here".to_string(),
+            diff_hunk: unified,
+            user: User {
+                login: "reviewer".to_string(),
+            },
+            is_minimized: false,
+        };
+
+        let mut grouped: HashMap<String, Vec<Comment>> = HashMap::new();
+        grouped.insert("src/lib.rs".to_string(), vec![comment]);
+
+        let mut output = Vec::new();
+        write_comments_as_markdown(&mut output, grouped).unwrap();
+        let markdown = String::from_utf8(output).unwrap();
+
+        assert_snapshot!(markdown);
+    }
 }
 
 #[cfg(test)]
 mod issue_formatting {
-    use crate::{client::Issue, formatting::write_issue_as_markdown};
-
-    fn test_issue_formatting(json: &str, expected: &str) {
-        let issue = serde_json::from_str::<Issue>(json).expect("Failed to parse JSON");
-        let mut actual = Vec::<u8>::new();
-        write_issue_as_markdown(&mut actual, &issue).expect("infaillable formatting");
-
-        let actual = String::from_utf8(actual).expect("valid utf8");
-
-        assert_eq!(
-            actual.trim(),
-            expected.trim(),
-            "Output mismatch:\n\nGot:\n{}\n\nExpected:\n{}",
-            actual,
-            expected
-        );
-    }
+    use crate::{
+        client::{Issue, Label, User},
+        formatting::write_issue_as_markdown,
+    };
+    use insta::assert_snapshot;
 
     #[test]
     fn test_simple_issue() {
-        let json = include_str!("../../examples/simple_issue.json");
-        let expected = include_str!("../../examples/simple_issue.expected.md");
-        test_issue_formatting(json, expected);
+        let issue = Issue {
+            id: "I_123".to_string(),
+            number: 42,
+            title: "Add dark mode support".to_string(),
+            body: Some(
+                "It would be great to have a dark mode option for the application.\n\n\
+                 This should include:\n\
+                 - Toggle in settings\n\
+                 - System preference detection\n\
+                 - Persistence of user choice"
+                    .to_string(),
+            ),
+            author: Some(User {
+                login: "octocat".to_string(),
+            }),
+            state: "OPEN".to_string(),
+            labels: vec![
+                Label {
+                    name: "enhancement".to_string(),
+                },
+                Label {
+                    name: "ui".to_string(),
+                },
+            ],
+        };
+
+        let mut output = Vec::new();
+        write_issue_as_markdown(&mut output, &issue).expect("format");
+        assert_snapshot!(String::from_utf8(output).expect("utf8"));
     }
 
     #[test]
     fn test_issue_no_body() {
-        let json = include_str!("../../examples/issue_no_body.json");
-        let expected = include_str!("../../examples/issue_no_body.expected.md");
-        test_issue_formatting(json, expected);
+        let issue = Issue {
+            id: "I_456".to_string(),
+            number: 99,
+            title: "Bug: Application crashes on startup".to_string(),
+            body: None,
+            author: Some(User {
+                login: "bugfinder".to_string(),
+            }),
+            state: "CLOSED".to_string(),
+            labels: vec![Label {
+                name: "bug".to_string(),
+            }],
+        };
+
+        let mut output = Vec::new();
+        write_issue_as_markdown(&mut output, &issue).expect("format");
+        assert_snapshot!(String::from_utf8(output).expect("utf8"));
     }
 }
 
 #[cfg(test)]
 mod integration {
     use crate::{
-        cli::review::group_comments_by_file, client::Comment,
-        formatting::write_comments_as_markdown,
+        client::{Comment, User},
+        formatting::{group_comments_by_file, write_comments_as_markdown},
     };
+    use insta::assert_snapshot;
 
-    fn test_formatting(json: &str, expected: &str) {
-        let comments = serde_json::from_str::<Vec<Comment>>(json).expect("Failed to parse JSON");
+    #[test]
+    fn test_simple_comment() {
+        let comments = vec![Comment {
+            id: String::new(),
+            path: "src/lib.rs".to_string(),
+            line: Some(10),
+            body: "This should return a Result instead".to_string(),
+            diff_hunk:
+                "@@ -8,4 +8,6 @@\n fn main() {\n     println!(\"Hello\");\n+    let x = 42;\n }\n"
+                    .to_string(),
+            user: User {
+                login: "reviewer".to_string(),
+            },
+            is_minimized: false,
+        }];
         let grouped = group_comments_by_file(comments);
-        let mut output = Vec::<u8>::new();
-        write_comments_as_markdown(&mut output, grouped).expect("infallible formatting");
-        let output = String::from_utf8(output).expect("valid utf8");
-        assert_eq!(
-            output.trim(),
-            expected.trim(),
-            "Output mismatch:\n\nGot:\n{}\n\nExpected:\n{}",
-            output,
-            expected
-        );
+        let mut output = Vec::new();
+        write_comments_as_markdown(&mut output, grouped).expect("format");
+        assert_snapshot!(String::from_utf8(output).expect("utf8"));
     }
 
     #[test]
-    fn test_example_simple_comment() {
-        let json = include_str!("../../examples/simple_comment.json");
-        let expected = include_str!("../../examples/simple_comment.expected.md");
-        test_formatting(json, expected);
+    fn test_multiline_comment() {
+        let comments = vec![Comment {
+            id: String::new(),
+            path: "src/handler.rs".to_string(),
+            line: Some(24),
+            body: "This function is doing too much.\n\n\
+                   Consider splitting into:\n\
+                   1. Validation logic\n\
+                   2. Business logic\n\
+                   3. Response formatting"
+                .to_string(),
+            diff_hunk: "@@ -22,4 +22,5 @@\n fn handle_request(req: Request) -> Response {\n     \
+                 let data = parse(req);\n+    let result = process(data);\n     Ok(result)\n }\n"
+                .to_string(),
+            user: User {
+                login: "architect".to_string(),
+            },
+            is_minimized: false,
+        }];
+        let grouped = group_comments_by_file(comments);
+        let mut output = Vec::new();
+        write_comments_as_markdown(&mut output, grouped).expect("format");
+        assert_snapshot!(String::from_utf8(output).expect("utf8"));
     }
 
     #[test]
-    fn test_example_multiple_comments() {
-        let json = include_str!("../../examples/multiple_comments.json");
-        let expected = include_str!("../../examples/multiple_comments.expected.md");
-        test_formatting(json, expected);
+    fn test_multiple_comments() {
+        let comments = vec![
+            Comment {
+                id: String::new(),
+                path: "src/config.rs".to_string(),
+                line: Some(14),
+                body: "Use a better variable name".to_string(),
+                diff_hunk: "@@ -12,3 +12,4 @@\n pub struct Config {\n     pub name: String,\n+    \
+                     pub value: i32,\n }\n"
+                    .to_string(),
+                user: User {
+                    login: "reviewer1".to_string(),
+                },
+                is_minimized: false,
+            },
+            Comment {
+                id: String::new(),
+                path: "src/config.rs".to_string(),
+                line: Some(14),
+                body: "Also add validation for this field".to_string(),
+                diff_hunk: "@@ -12,3 +12,4 @@\n pub struct Config {\n     pub name: String,\n+    \
+                     pub value: i32,\n }\n"
+                    .to_string(),
+                user: User {
+                    login: "reviewer2".to_string(),
+                },
+                is_minimized: false,
+            },
+        ];
+        let grouped = group_comments_by_file(comments);
+        let mut output = Vec::new();
+        write_comments_as_markdown(&mut output, grouped).expect("format");
+        assert_snapshot!(String::from_utf8(output).expect("utf8"));
     }
 
     #[test]
-    fn test_example_multiline_comment() {
-        let json = include_str!("../../examples/multiline_comment.json");
-        let expected = include_str!("../../examples/multiline_comment.expected.md");
-        test_formatting(json, expected);
-    }
-
-    #[test]
-    fn test_example_no_line_number() {
-        let json = include_str!("../../examples/no_line_number.json");
-        let expected = include_str!("../../examples/no_line_number.expected.md");
-        test_formatting(json, expected);
+    fn test_comment_without_line_number() {
+        let comments = vec![Comment {
+            id: String::new(),
+            path: "src/main.rs".to_string(),
+            line: None,
+            body: "This entire section needs refactoring".to_string(),
+            diff_hunk: "@@ -10,8 +10,10 @@\n fn main() {\n     setup();\n+    run();\n     \
+                        cleanup();\n }\n"
+                .to_string(),
+            user: User {
+                login: "reviewer".to_string(),
+            },
+            is_minimized: false,
+        }];
+        let grouped = group_comments_by_file(comments);
+        let mut output = Vec::new();
+        write_comments_as_markdown(&mut output, grouped).expect("format");
+        assert_snapshot!(String::from_utf8(output).expect("utf8"));
     }
 }
 
@@ -194,6 +347,7 @@ mod cli_end_to_end {
         let client = MockGitHubClient::new("testuser").with_comments(
             "test-review",
             [Comment {
+                id: String::new(),
                 path: "test.rs".to_string(),
                 line: Some(1),
                 body: "test comment".to_string(),
@@ -201,6 +355,7 @@ mod cli_end_to_end {
                 user: User {
                     login: "user".to_string(),
                 },
+                is_minimized: false,
             }],
         );
 
@@ -217,7 +372,6 @@ mod cli_end_to_end {
             },
             state: "APPROVED".to_string(),
             body: Some("Test review".to_string()),
-            created_at: "2024-01-01T00:00:00Z".to_string(),
             comments: CommentCount {
                 total_count: comment_count,
             },
@@ -226,6 +380,7 @@ mod cli_end_to_end {
 
     fn create_test_comment(path: &str, line: Option<u32>, body: &str, user: &str) -> Comment {
         Comment {
+            id: String::new(),
             path: path.to_string(),
             line,
             body: body.to_string(),
@@ -235,6 +390,7 @@ mod cli_end_to_end {
             user: User {
                 login: user.to_string(),
             },
+            is_minimized: false,
         }
     }
 
@@ -423,7 +579,6 @@ mod cli_end_to_end {
                 login: "reporter".to_string(),
             }),
             state: "OPEN".to_string(),
-            created_at: "2024-01-15T10:30:00Z".to_string(),
             labels: vec![],
         };
 
@@ -452,7 +607,6 @@ mod cli_end_to_end {
                 login: "user".to_string(),
             }),
             state: "OPEN".to_string(),
-            created_at: "2024-02-01T08:00:00Z".to_string(),
             labels: vec![],
         };
 

@@ -1,10 +1,24 @@
 ---
 source: repo-to-md/src/tests.rs
 expression: output_str
+snapshot_kind: text
 ---
-# Pull Request Review Comments
+# Review comments
 
-Please address the following review comments:
+Please address the following review comments. The comments are given as inline
+comments inside code blocks. They use the comment format of the language of the
+commented file. Each comment is wrapped in "<review>" tags.
+
+For example, a Rust file may look like:
+
+```rust
+fn main() {
+    println!("13");
+    // <review>
+    // Please use 42 as the number
+    // </review>
+}
+```
 
 ## `src/main.rs` - Lines 8-11
 
@@ -12,7 +26,7 @@ Please address the following review comments:
 fn main() {
     println!("Hello");
     let x = 42;
-    // <review user="alice">
+    // <review>
     // Nice work!
     // </review>
 }

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::Write;
 
 use anyhow::{Context, Result, bail};
@@ -7,10 +6,10 @@ use argh::FromArgs;
 use crate::{
     apply::{apply_comments_to_files, print_apply_result},
     client::{
-        Comment, FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient,
-        ListReviewsClient, Review,
+        FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient, ListReviewsClient,
+        Review,
     },
-    formatting::write_comments_as_markdown,
+    formatting::{group_comments_by_file, write_comments_as_markdown},
     repository::{CheckWorkingDirectory, GetCurrentBranch, GetRepoRoot, GetRepoistoryInfo},
 };
 
@@ -291,7 +290,10 @@ pub(crate) fn select_review_by_index<'a>(reviews: &[&'a Review], index: i32) -> 
     }
 
     let selected = if index == -1 {
-        *reviews.last().unwrap()
+        let Some(last) = reviews.last() else {
+            unreachable!("reviews is non-empty");
+        };
+        *last
     } else if index >= 1 && index as usize <= reviews.len() {
         reviews[(index - 1) as usize]
     } else {
@@ -303,29 +305,6 @@ pub(crate) fn select_review_by_index<'a>(reviews: &[&'a Review], index: i32) -> 
     };
 
     Ok(selected)
-}
-
-/// Groups comments by their file path.
-///
-/// Takes a vector of comments and organizes them into a HashMap where the key
-/// is the file path and the value is a vector of all comments for that file.
-///
-/// # Arguments
-///
-/// * `comments` - A vector of [`Comment`] structs to group
-///
-/// # Returns
-///
-/// A HashMap mapping file paths to vectors of comments for that file.
-pub fn group_comments_by_file(comments: Vec<Comment>) -> HashMap<String, Vec<Comment>> {
-    let mut grouped: HashMap<String, Vec<Comment>> = HashMap::new();
-    for comment in comments {
-        grouped
-            .entry(comment.path.clone())
-            .or_default()
-            .push(comment);
-    }
-    grouped
 }
 
 #[cfg(test)]
@@ -342,7 +321,6 @@ mod tests {
             },
             state: "APPROVED".to_string(),
             body: Some("Test review".to_string()),
-            created_at: "2024-01-01T00:00:00Z".to_string(),
             comments: CommentCount {
                 total_count: comment_count,
             },

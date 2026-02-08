@@ -59,7 +59,7 @@ review comments:
 
 ```rust
 pub fn main() {
-// <review user="reviewer">
+// <review>
 // Consider using clap for argument parsing
 // </review>
     println!("Hello");
@@ -67,5 +67,5 @@ pub fn main() {
 ```
 ````
 
-Each comment is embedded as `<review user="...">...</review>` XML tags using the
+Each comment is embedded as `<review>...</review>` XML tags using the
 language-specific comment syntax.

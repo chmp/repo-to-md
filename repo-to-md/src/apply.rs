@@ -51,7 +51,7 @@ impl fmt::Display for Truncated<'_> {
 /// Applies PR review comments directly to source files
 ///
 /// Comments are inserted after the target line using language-specific comment
-/// syntax, wrapped in `<review user="...">` XML tags.
+/// syntax, wrapped in `<review>` XML tags.
 pub fn apply_comments_to_files(
     comments: HashMap<String, Vec<Comment>>,
     repo_root: &Path,
@@ -269,7 +269,6 @@ fn format_comment_for_insertion<'a>(
         indentation,
         prefix,
         suffix,
-        login: &comment.user.login,
         lines: comment.body.lines(),
         state: FormattedCommentIteratorState::Start,
     }
@@ -279,7 +278,6 @@ struct FormattedCommentIterator<'a> {
     indentation: &'a str,
     prefix: &'a str,
     suffix: &'a str,
-    login: &'a str,
     lines: Lines<'a>,
     state: FormattedCommentIteratorState,
 }
@@ -309,10 +307,7 @@ impl Iterator for FormattedCommentIterator<'_> {
             match self.state {
                 FormattedCommentIteratorState::Start => {
                     self.state = FormattedCommentIteratorState::Body;
-                    return Some(format!(
-                        "{indentation}{prefix} <review user=\"{login}\">{suffix}",
-                        login = self.login
-                    ));
+                    return Some(format!("{indentation}{prefix} <review>{suffix}"));
                 }
                 FormattedCommentIteratorState::Body => {
                     let Some(line) = self.lines.next() else {
@@ -380,6 +375,7 @@ mod tests {
 
     fn create_test_comment(path: &str, line: Option<u32>, body: &str, user: &str) -> Comment {
         Comment {
+            id: String::new(),
             path: path.to_string(),
             line,
             body: body.to_string(),
@@ -387,6 +383,7 @@ mod tests {
             user: User {
                 login: user.to_string(),
             },
+            is_minimized: false,
         }
     }
 

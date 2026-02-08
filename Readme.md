@@ -80,43 +80,17 @@ Skills are installed to `~/.claude/skills/review-to-md/` (global) or
 
 ### Review selection options
 
-Per default the PR matching the current branch is selected, to explicitly select
-a review, use
+The default behavior auto-detects the PR from the current branch and selects
+the last review. Use flags to override:
 
 ```bash
-repo-to-md review --pr 78
-```
-
-Per default the last review on a PR is selected, to explicitly select a review
-either by ID or by index, use
-
-```bash
-repo-to-md review --review PRR_kwDOAbcdef123456 # Fixed id
-repo-to-md review --review 1                    # First review
+repo-to-md review --pr 78                      # Specific PR
 repo-to-md review --review -1                   # Last review
+repo-to-md review --author @me                  # Filter by author
+repo-to-md review --repo owner/repo             # Override repository
 ```
 
-Per default the reviews considered when selecting by index are filterted by the
-current user, to select reviews by another user use
-
-```bash
-repo-to-md review --author username    # Select from reviews by 'username'
-repo-to-md review --author @me         # Select from your own reviews
-```
-
-Per default the GitHub repository for the `origin` remote is used, to overwrite
-the repo, use
-
-```bash
-repo-to-md review --repo owner/repo
-```
-
-Note that, when specifying a review id directly, other review filters are
-ignored. All filters can be combined, for example
-
-```bash
-repo-to-md review --pr 78 --author username --review-index -1  # Last review by 'username' on pr 78
-```
+For all available options, run `repo-to-md review --help`.
 
 ### Apply mode
 
@@ -129,12 +103,12 @@ repo-to-md review --pr 78 --apply      # Apply comments from specific PR
 ```
 
 This inserts comments directly into your source files using language-appropriate
-comment syntax, wrapped in `<review user="...">` tags:
+comment syntax, wrapped in `<review>` tags:
 
 ```rust
 fn main() {
     let x = 1;
-    // <review user="reviewer">
+    // <review>
     // Consider using a more descriptive name
     // </review>
 }
@@ -157,6 +131,37 @@ repo-to-md issue 42 --repo owner/repo
 ```
 
 The repository is auto-detected from the `origin` remote when not specified.
+
+### Local review
+
+Review local commits in a web UI before merging to the base branch:
+
+```bash
+repo-to-md local review                    # Auto-detect base, review commits up to HEAD
+repo-to-md local review main               # Review commits from main to HEAD
+repo-to-md local review main feature       # Review commits from main to feature
+```
+
+This launches a local web server with a side-by-side diff viewer where you can
+add comments to the changes. The command reviews a range of commits (base..end)
+and refuses to start if there are uncommitted changes when reviewing HEAD (use
+`--force` to override). Comments are persisted to `review-comments.json` (use
+`-o` to change). The diff and commit list are also persisted, so reopening the
+session detects if commits have changed.
+
+For all available options, run `repo-to-md local review --help`.
+
+The comments from a local review session can be exported to markdown by running:
+
+```bash
+repo-to-md local format
+```
+
+To customize the review comments or the output to a file use
+
+```bash
+repo-to-md local format my-review.json -o review.md
+```
 
 ## How it works
 

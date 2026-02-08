@@ -9,3 +9,5 @@ explore_*.md
 tmp/
 *_output.md
 tmpclaude-*
+review-comments.md
+review-comments.json

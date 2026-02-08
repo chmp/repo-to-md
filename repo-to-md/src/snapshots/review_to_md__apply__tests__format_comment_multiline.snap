@@ -1,8 +1,9 @@
 ---
 source: repo-to-md/src/apply.rs
 expression: result
+snapshot_kind: text
 ---
-// <review user="reviewer">
+// <review>
 // Line 1
 // Line 2
 // Line 3

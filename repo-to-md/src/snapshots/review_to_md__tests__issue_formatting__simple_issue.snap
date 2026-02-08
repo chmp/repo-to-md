@@ -1,9 +1,11 @@
+---
+source: repo-to-md/src/tests.rs
+expression: "String::from_utf8(output).expect(\"utf8\")"
+snapshot_kind: text
+---
 # Issue #42: Add dark mode support
 
-- **State:** OPEN
-- **Author:** @octocat
-- **Created:** 2024-01-15T10:30:00Z
-- **Labels:** enhancement, ui
+**Labels:** enhancement, ui
 
 ## Description
 

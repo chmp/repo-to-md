@@ -1,5 +1,6 @@
 mod install_skill;
 mod issue;
+mod local;
 mod query;
 pub(crate) mod review;
 
@@ -8,6 +9,7 @@ use argh::FromArgs;
 
 pub use install_skill::InstallSkillCommand;
 pub use issue::IssueCommand;
+pub use local::LocalCommand;
 pub use query::QueryCommand;
 pub use review::ReviewCommand;
 
@@ -27,6 +29,7 @@ pub enum Command {
     Issue(IssueCommand),
     InstallSkill(InstallSkillCommand),
     Query(QueryCommand),
+    Local(LocalCommand),
 }
 
 impl Cli {
@@ -52,6 +55,7 @@ impl Cli {
                 check_executable("gh")?;
                 cmd.run(&GithubClient)
             }
+            Command::Local(cmd) => cmd.run(),
         }
     }
 }
