@@ -21,6 +21,8 @@ export class App {
         this.diffView = document.querySelector('diff-view');
         this.refInfo = document.getElementById('refInfo');
         this.shutdownBtn = document.getElementById('shutdownBtn');
+        this.prevCommentBtn = document.getElementById('prevCommentBtn');
+        this.nextCommentBtn = document.getElementById('nextCommentBtn');
 
         this.setupEventListeners();
     }
@@ -132,9 +134,13 @@ export class App {
             await this.toggleMinimizeComment(e.detail.id);
         });
 
-        // Comment navigation
-        document.addEventListener('navigate-comment', (e) => {
-            this.navigateComment(e.detail.direction);
+        // Comment navigation buttons in header
+        this.prevCommentBtn.addEventListener('click', () => {
+            this.navigateComment(-1);
+        });
+
+        this.nextCommentBtn.addEventListener('click', () => {
+            this.navigateComment(1);
         });
 
         // Sync file tree when diff view requests a file selection (e.g., for global comments)

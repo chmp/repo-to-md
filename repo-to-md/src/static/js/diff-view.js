@@ -123,10 +123,6 @@ class DiffView extends HTMLElement {
                     <span class="diff-file-status ${file.status}"></span>
                     <span>${escapeHtml(file.path)}</span>
                     ${file.old_path ? `<span style="color: var(--text-secondary)"> (renamed from ${escapeHtml(file.old_path)})</span>` : ''}
-                    <div class="comment-nav">
-                        <button class="button button-small comment-nav-prev" title="Previous comment">&#9650; Prev</button>
-                        <button class="button button-small comment-nav-next" title="Next comment">Next &#9660;</button>
-                    </div>
                 </div>
                 ${file.hunks.map((hunk, hunkIndex) => this.renderHunk(file, hunk, hunkIndex, commentsByLine)).join('')}
             </div>
@@ -312,21 +308,6 @@ class DiffView extends HTMLElement {
                 bubbles: true,
             }));
         }));
-
-        // Navigation buttons
-        this.querySelector('.comment-nav-prev')?.addEventListener('click', () => {
-            this.dispatchEvent(new CustomEvent('navigate-comment', {
-                detail: { direction: -1 },
-                bubbles: true,
-            }));
-        });
-
-        this.querySelector('.comment-nav-next')?.addEventListener('click', () => {
-            this.dispatchEvent(new CustomEvent('navigate-comment', {
-                detail: { direction: 1 },
-                bubbles: true,
-            }));
-        });
     }
 
     /**

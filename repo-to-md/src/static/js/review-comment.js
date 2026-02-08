@@ -42,9 +42,6 @@ class ReviewComment extends HTMLElement {
             ? '<span class="comment-minimized-badge">Resolved</span>'
             : '';
         const minimizeButtonText = this.comment.is_minimized ? 'Unresolve' : 'Resolve';
-        const commentBodyHtml = this.comment.is_minimized
-            ? ''
-            : `<div class="comment-body">${escapeHtml(this.comment.body)}</div>`;
 
         this.innerHTML = `
             <div class="comment-header">
@@ -56,7 +53,7 @@ class ReviewComment extends HTMLElement {
                     <button class="button button-small button-danger delete-button">Delete</button>
                 </div>
             </div>
-            ${commentBodyHtml}
+            <div class="comment-body">${escapeHtml(this.comment.body)}</div>
         `;
 
         this.querySelector('.minimize-button').addEventListener('click', () => {
