@@ -61,6 +61,7 @@ pub async fn create_comment(
         body: req.body,
         user: User { login: req.user },
         diff_hunk: req.diff_hunk,
+        is_minimized: false,
     };
 
     let comment = state
@@ -105,6 +106,21 @@ pub async fn delete_comment(
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::NotFound(format!("Comment {} not found", id)))
+    }
+}
+
+/// POST /api/v1/comments/{id}/minimize - Toggle minimized state
+pub async fn toggle_minimize_comment(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<CommentResponse>, AppError> {
+    let comment = state
+        .toggle_minimize_comment(&id)
+        .map_err(|e| AppError::Internal(format!("Failed to toggle minimize: {}", e)))?;
+
+    match comment {
+        Some(comment) => Ok(Json(CommentResponse { comment })),
+        None => Err(AppError::NotFound(format!("Comment {} not found", id))),
     }
 }
 

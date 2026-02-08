@@ -59,6 +59,13 @@ impl FormatCommand {
             }
         }
 
+        // Filter out minimized comments
+        let comments: Vec<_> = comments.into_iter().filter(|c| !c.is_minimized).collect();
+        if comments.is_empty() {
+            eprintln!("No active comments to export (all minimized).");
+            return Ok(());
+        }
+
         let grouped_comments = group_comments_by_file(comments);
 
         match &self.output {
@@ -79,5 +86,110 @@ impl FormatCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_format_filters_minimized_comments() {
+        use std::io::Write;
+
+        // Create a temp file with comments including minimized ones
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let comments_data = serde_json::json!({
+            "version": 1,
+            "start_ref": "HEAD~1",
+            "start_sha": "abc123",
+            "end_ref": "HEAD",
+            "end_sha": "def456",
+            "raw_diff": "",
+            "comments": [
+                {
+                    "id": "1",
+                    "path": "test.rs",
+                    "line": 1,
+                    "body": "Active comment",
+                    "diff_hunk": "",
+                    "user": { "login": "user1" },
+                    "is_minimized": false
+                },
+                {
+                    "id": "2",
+                    "path": "test.rs",
+                    "line": 2,
+                    "body": "Minimized comment",
+                    "diff_hunk": "",
+                    "user": { "login": "user2" },
+                    "is_minimized": true
+                }
+            ],
+            "viewed_files": []
+        });
+        temp_file
+            .write_all(serde_json::to_string(&comments_data).unwrap().as_bytes())
+            .unwrap();
+        temp_file.flush().unwrap();
+
+        let cmd = FormatCommand {
+            comments_file: temp_file.path().to_path_buf(),
+            output: None,
+        };
+
+        let result = cmd.run();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_format_all_minimized_comments() {
+        use std::io::Write;
+
+        // Create a temp file with all minimized comments
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let comments_data = serde_json::json!({
+            "version": 1,
+            "start_ref": "HEAD~1",
+            "start_sha": "abc123",
+            "end_ref": "HEAD",
+            "end_sha": "def456",
+            "raw_diff": "",
+            "comments": [
+                {
+                    "id": "1",
+                    "path": "test.rs",
+                    "line": 1,
+                    "body": "Minimized comment 1",
+                    "diff_hunk": "",
+                    "user": { "login": "user1" },
+                    "is_minimized": true
+                },
+                {
+                    "id": "2",
+                    "path": "test.rs",
+                    "line": 2,
+                    "body": "Minimized comment 2",
+                    "diff_hunk": "",
+                    "user": { "login": "user2" },
+                    "is_minimized": true
+                }
+            ],
+            "viewed_files": []
+        });
+        temp_file
+            .write_all(serde_json::to_string(&comments_data).unwrap().as_bytes())
+            .unwrap();
+        temp_file.flush().unwrap();
+
+        let cmd = FormatCommand {
+            comments_file: temp_file.path().to_path_buf(),
+            output: None,
+        };
+
+        let result = cmd.run();
+        // Should succeed with no output since all comments are minimized
+        assert!(result.is_ok());
     }
 }

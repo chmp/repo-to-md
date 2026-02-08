@@ -123,6 +123,10 @@ class DiffView extends HTMLElement {
                     <span class="diff-file-status ${file.status}"></span>
                     <span>${escapeHtml(file.path)}</span>
                     ${file.old_path ? `<span style="color: var(--text-secondary)"> (renamed from ${escapeHtml(file.old_path)})</span>` : ''}
+                    <div class="comment-nav">
+                        <button class="button button-small comment-nav-prev" title="Previous comment">&#9650; Prev</button>
+                        <button class="button button-small comment-nav-next" title="Next comment">Next &#9660;</button>
+                    </div>
                 </div>
                 ${file.hunks.map((hunk, hunkIndex) => this.renderHunk(file, hunk, hunkIndex, commentsByLine)).join('')}
             </div>
@@ -169,9 +173,12 @@ class DiffView extends HTMLElement {
             // New (right) side - all lines are commentable
             if (row.new_line) {
                 const newContent = row.new_line.highlighted_html || escapeHtml(row.new_line.content);
+                const lineComments = commentsByLine[row.new_line.number] || [];
+                const hasComments = lineComments.length > 0;
+                const commentIndicator = hasComments ? '<span class="line-comment-indicator"></span>' : '';
                 html += `
-                    <td class="diff-line-num">${row.new_line.number}</td>
-                    <td class="diff-line-content new ${row.new_line.line_type} commentable"
+                    <td class="diff-line-num ${hasComments ? 'has-comment' : ''}">${row.new_line.number}${commentIndicator}</td>
+                    <td class="diff-line-content new ${row.new_line.line_type} ${hasComments ? 'has-comment' : ''} commentable"
                         data-path="${escapeAttr(file.path)}"
                         data-line="${row.new_line.number}"
                         data-hunk-index="${hunkIndex}"><div class="diff-line-inner" data-side="new">${newContent}</div></td>
@@ -305,6 +312,36 @@ class DiffView extends HTMLElement {
                 bubbles: true,
             }));
         }));
+
+        // Navigation buttons
+        this.querySelector('.comment-nav-prev')?.addEventListener('click', () => {
+            this.dispatchEvent(new CustomEvent('navigate-comment', {
+                detail: { direction: -1 },
+                bubbles: true,
+            }));
+        });
+
+        this.querySelector('.comment-nav-next')?.addEventListener('click', () => {
+            this.dispatchEvent(new CustomEvent('navigate-comment', {
+                detail: { direction: 1 },
+                bubbles: true,
+            }));
+        });
+    }
+
+    /**
+     * Scroll to a specific comment and highlight it
+     * @param {string} commentId - Comment ID to scroll to
+     */
+    scrollToComment(commentId) {
+        const commentEl = this.querySelector(`review-comment[data-comment-id="${commentId}"]`);
+        if (commentEl) {
+            commentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            commentEl.classList.add('nav-highlight');
+            setTimeout(() => {
+                commentEl.classList.remove('nav-highlight');
+            }, 1500);
+        }
     }
 
     attachGlobalEventListeners() {

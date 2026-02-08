@@ -68,6 +68,15 @@ export async function deleteComment(id) {
 }
 
 /**
+ * Toggle the minimized state of a comment
+ * @param {string} id - Comment ID
+ * @returns {Promise<{comment: Object}>}
+ */
+export async function toggleMinimizeComment(id) {
+    return apiRequest(`/comments/${id}/minimize`, { method: 'POST' });
+}
+
+/**
  * Set the viewed status of a file
  * @param {string} path - File path
  * @param {boolean} viewed - Whether the file is viewed

@@ -383,6 +383,7 @@ mod tests {
             user: User {
                 login: user.to_string(),
             },
+            is_minimized: false,
         }
     }
 

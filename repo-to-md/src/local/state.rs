@@ -218,6 +218,24 @@ impl AppState {
 
         Ok(removed)
     }
+
+    pub fn toggle_minimize_comment(&self, id: &str) -> Result<Option<Comment>> {
+        let updated = {
+            let mut comments = self.comments.write().expect("lock poisoned");
+            if let Some(comment) = comments.iter_mut().find(|c| c.id == id) {
+                comment.is_minimized = !comment.is_minimized;
+                Some(comment.clone())
+            } else {
+                None
+            }
+        };
+
+        if updated.is_some() {
+            self.save_comments()?;
+        }
+
+        Ok(updated)
+    }
 }
 
 fn atomic_write_json(path: &Path, value: &impl Serialize) -> Result<()> {

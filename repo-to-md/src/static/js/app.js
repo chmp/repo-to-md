@@ -6,7 +6,7 @@
 import * as api from './api.js';
 import './file-tree.js';
 import './diff-view.js';
-import { getCommentsByFile, computeFileTreeItems } from './utils.js';
+import { getCommentsByFile, computeFileTreeItems, getCommentPositions } from './utils.js';
 
 export class App {
     constructor() {
@@ -15,6 +15,7 @@ export class App {
         this.viewedFiles = [];
         this.filesMap = new Map();  // path -> file object
         this.username = 'user';
+        this.lastNavigatedCommentId = null;
 
         this.fileTree = document.querySelector('file-tree');
         this.diffView = document.querySelector('diff-view');
@@ -69,7 +70,7 @@ export class App {
             commentsByFile,
             viewedSet
         );
-        const generalCount = (commentsByFile['__general__'] || []).length;
+        const generalCount = (commentsByFile['__general__'] || []).filter(c => !c.is_minimized).length;
         this.fileTree.setItems(items, generalCount);
         this.updateRemainingUnviewed();
     }
@@ -124,6 +125,16 @@ export class App {
         // Comment deletion
         document.addEventListener('comment-delete', async (e) => {
             await this.deleteComment(e.detail.id);
+        });
+
+        // Comment minimize toggle
+        document.addEventListener('comment-minimize', async (e) => {
+            await this.toggleMinimizeComment(e.detail.id);
+        });
+
+        // Comment navigation
+        document.addEventListener('navigate-comment', (e) => {
+            this.navigateComment(e.detail.direction);
         });
 
         // Sync file tree when diff view requests a file selection (e.g., for global comments)
@@ -239,6 +250,65 @@ export class App {
             console.error('Failed to delete comment:', error);
             alert('Failed to delete comment. Please try again.');
         }
+    }
+
+    async toggleMinimizeComment(id) {
+        try {
+            const result = await api.toggleMinimizeComment(id);
+            const index = this.comments.findIndex(c => c.id === id);
+            if (index !== -1) {
+                this.comments[index] = result.comment;
+            }
+            this.updateViews();
+        } catch (error) {
+            console.error('Failed to toggle minimize comment:', error);
+            alert('Failed to toggle minimize. Please try again.');
+        }
+    }
+
+    navigateComment(direction) {
+        const commentsByFile = getCommentsByFile(this.comments);
+        const positions = getCommentPositions(
+            Array.from(this.filesMap.values()),
+            commentsByFile,
+            true
+        );
+
+        if (positions.length === 0) return;
+
+        // Find current index
+        let currentIndex = -1;
+        if (this.lastNavigatedCommentId) {
+            currentIndex = positions.findIndex(p => p.id === this.lastNavigatedCommentId);
+        }
+
+        // If no previous navigation or not found, use first/last comment in current file
+        if (currentIndex === -1) {
+            const currentPath = this.diffView.selectedFile;
+            const filePositions = positions.filter(p => p.path === currentPath);
+            if (filePositions.length > 0) {
+                currentIndex = positions.indexOf(direction > 0 ? filePositions[0] : filePositions[filePositions.length - 1]);
+            } else {
+                currentIndex = direction > 0 ? -1 : positions.length;
+            }
+        }
+
+        // Calculate target index with wrapping
+        const targetIndex = (currentIndex + direction + positions.length) % positions.length;
+        const target = positions[targetIndex];
+
+        // Navigate to target file if different
+        if (target.path !== this.diffView.selectedFile) {
+            this.fileTree.selectFile(target.path);
+            // Scroll to comment after file loads
+            requestAnimationFrame(() => {
+                this.diffView.scrollToComment(target.id);
+            });
+        } else {
+            this.diffView.scrollToComment(target.id);
+        }
+
+        this.lastNavigatedCommentId = target.id;
     }
 
     updateViews() {

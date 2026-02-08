@@ -58,6 +58,9 @@ pub struct Comment {
     pub diff_hunk: String,
     /// The user who made the comment
     pub user: User,
+    /// Whether the comment is minimized (resolved, outdated, etc.)
+    #[serde(default)]
+    pub is_minimized: bool,
 }
 
 /// A GitHub user.

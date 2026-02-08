@@ -35,16 +35,36 @@ class ReviewComment extends HTMLElement {
     }
 
     renderViewMode() {
+        this.classList.toggle('minimized', this.comment.is_minimized);
+        this.setAttribute('data-comment-id', this.comment.id);
+
+        const minimizedBadge = this.comment.is_minimized
+            ? '<span class="comment-minimized-badge">Resolved</span>'
+            : '';
+        const minimizeButtonText = this.comment.is_minimized ? 'Unresolve' : 'Resolve';
+        const commentBodyHtml = this.comment.is_minimized
+            ? ''
+            : `<div class="comment-body">${escapeHtml(this.comment.body)}</div>`;
+
         this.innerHTML = `
             <div class="comment-header">
                 <span class="comment-author">${escapeHtml(this.comment.user.login)}</span>
+                ${minimizedBadge}
                 <div class="comment-actions">
+                    <button class="button button-small minimize-button">${minimizeButtonText}</button>
                     <button class="button button-small edit-button">Edit</button>
                     <button class="button button-small button-danger delete-button">Delete</button>
                 </div>
             </div>
-            <div class="comment-body">${escapeHtml(this.comment.body)}</div>
+            ${commentBodyHtml}
         `;
+
+        this.querySelector('.minimize-button').addEventListener('click', () => {
+            this.dispatchEvent(new CustomEvent('comment-minimize', {
+                detail: { id: this.comment.id },
+                bubbles: true,
+            }));
+        });
 
         this.querySelector('.edit-button').addEventListener('click', () => {
             this.isEditing = true;

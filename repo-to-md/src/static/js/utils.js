@@ -119,9 +119,38 @@ export function computeFileTreeItems(files, commentsByFile, viewedFiles) {
     return files.map(file => ({
         path: file.path,
         status: file.status,
-        commentCount: (commentsByFile[file.path] || []).length,
+        commentCount: (commentsByFile[file.path] || []).filter(c => !c.is_minimized).length,
         isViewed: viewedFiles.has(file.path),
     }));
+}
+
+/**
+ * Get an ordered list of comment positions for navigation
+ * @param {Array} files - Array of file objects with path property
+ * @param {Object} commentsByFile - Object mapping file paths to comment arrays
+ * @param {boolean} skipMinimized - Whether to skip minimized comments
+ * @returns {Array} Array of { path, line, id } in navigation order
+ */
+export function getCommentPositions(files, commentsByFile, skipMinimized = false) {
+    const positions = [];
+
+    // Global comments first
+    for (const c of (commentsByFile['__general__'] || [])) {
+        if (skipMinimized && c.is_minimized) continue;
+        positions.push({ path: '__general__', line: null, id: c.id });
+    }
+
+    // File comments in file order, sorted by line within each file
+    for (const file of files) {
+        const fileComments = (commentsByFile[file.path] || [])
+            .filter(c => !skipMinimized || !c.is_minimized)
+            .sort((a, b) => (a.line || 0) - (b.line || 0));
+        for (const c of fileComments) {
+            positions.push({ path: file.path, line: c.line, id: c.id });
+        }
+    }
+
+    return positions;
 }
 
 /**

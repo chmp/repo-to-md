@@ -96,6 +96,7 @@ mod diff_parsing {
             user: User {
                 login: "reviewer".to_string(),
             },
+            is_minimized: false,
         };
 
         let mut grouped: HashMap<String, Vec<Comment>> = HashMap::new();
@@ -193,6 +194,7 @@ mod integration {
             user: User {
                 login: "reviewer".to_string(),
             },
+            is_minimized: false,
         }];
         let grouped = group_comments_by_file(comments);
         let mut output = Vec::new();
@@ -218,6 +220,7 @@ mod integration {
             user: User {
                 login: "architect".to_string(),
             },
+            is_minimized: false,
         }];
         let grouped = group_comments_by_file(comments);
         let mut output = Vec::new();
@@ -239,6 +242,7 @@ mod integration {
                 user: User {
                     login: "reviewer1".to_string(),
                 },
+                is_minimized: false,
             },
             Comment {
                 id: String::new(),
@@ -251,6 +255,7 @@ mod integration {
                 user: User {
                     login: "reviewer2".to_string(),
                 },
+                is_minimized: false,
             },
         ];
         let grouped = group_comments_by_file(comments);
@@ -272,6 +277,7 @@ mod integration {
             user: User {
                 login: "reviewer".to_string(),
             },
+            is_minimized: false,
         }];
         let grouped = group_comments_by_file(comments);
         let mut output = Vec::new();
@@ -349,6 +355,7 @@ mod cli_end_to_end {
                 user: User {
                     login: "user".to_string(),
                 },
+                is_minimized: false,
             }],
         );
 
@@ -383,6 +390,7 @@ mod cli_end_to_end {
             user: User {
                 login: user.to_string(),
             },
+            is_minimized: false,
         }
     }
 

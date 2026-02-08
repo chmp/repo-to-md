@@ -158,6 +158,7 @@ impl FetchReviewCommentsClient for GithubClient {
                 user: User {
                     login: gc.author.login,
                 },
+                is_minimized: gc.is_minimized,
             })
             .collect();
 
@@ -353,7 +354,6 @@ struct GraphQLComment {
     #[allow(dead_code)]
     start_line: Option<u32>,
     diff_hunk: String,
-    #[allow(dead_code)]
     is_minimized: bool,
     author: GraphQLAuthor,
 }

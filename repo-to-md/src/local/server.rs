@@ -12,7 +12,8 @@ use tokio::sync::broadcast;
 
 use super::assets::serve_static;
 use super::handlers::{
-    create_comment, delete_comment, get_session, set_path_status, update_comment,
+    create_comment, delete_comment, get_session, set_path_status, toggle_minimize_comment,
+    update_comment,
 };
 use super::refspec::RefSpec;
 use super::state::AppState;
@@ -108,6 +109,10 @@ pub async fn bind_server(
         .route("/api/v1/comments", post(create_comment))
         .route("/api/v1/comments/{id}", put(update_comment))
         .route("/api/v1/comments/{id}", delete(delete_comment))
+        .route(
+            "/api/v1/comments/{id}/minimize",
+            post(toggle_minimize_comment),
+        )
         .route("/api/v1/paths/{*path}", post(set_path_status))
         .route("/api/v1/shutdown", post(shutdown_handler))
         .with_state(server_state)
