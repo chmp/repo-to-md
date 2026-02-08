@@ -12,30 +12,27 @@
 /// A language identifier string (e.g., "rust", "python", "javascript") or an
 /// empty string if the language cannot be determined.
 pub fn detect_language(path: &str) -> &str {
-    if let Some(ext) = path.rsplit('.').next() {
-        match ext {
-            "rs" => "rust",
-            "py" => "python",
-            "md" => "markdown",
-            "toml" => "toml",
-            "js" => "javascript",
-            "ts" => "typescript",
-            "jsx" => "javascript",
-            "tsx" => "typescript",
-            "c" | "h" => "c",
-            "cpp" | "cc" | "hpp" => "cpp",
-            "java" => "java",
-            "go" => "go",
-            "rb" => "ruby",
-            "sh" | "bash" => "bash",
-            "yaml" | "yml" => "yaml",
-            "json" => "json",
-            "html" => "html",
-            "css" => "css",
-            _ => "",
-        }
-    } else {
-        ""
+    let Some(ext) = path.rsplit('.').next() else {
+        return "";
+    };
+    match ext {
+        "rs" => "rust",
+        "py" => "python",
+        "md" => "markdown",
+        "toml" => "toml",
+        "js" | "jsx" => "javascript",
+        "ts" | "tsx" => "typescript",
+        "c" | "h" => "c",
+        "cpp" | "cc" | "hpp" => "cpp",
+        "java" => "java",
+        "go" => "go",
+        "rb" => "ruby",
+        "sh" | "bash" => "bash",
+        "yaml" | "yml" => "yaml",
+        "json" => "json",
+        "html" => "html",
+        "css" => "css",
+        _ => "",
     }
 }
 

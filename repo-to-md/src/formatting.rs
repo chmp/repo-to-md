@@ -5,6 +5,47 @@ use crate::client::{Comment, Issue};
 use crate::diff::{calculate_context_range, parse_diff_hunk_with_line_numbers};
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
 
+/// Groups comments by their file path.
+///
+/// Takes a vector of comments and organizes them into a HashMap where the key
+/// is the file path and the value is a vector of all comments for that file.
+///
+/// # Arguments
+///
+/// * `comments` - A vector of [`Comment`] structs to group
+///
+/// # Returns
+///
+/// A HashMap mapping file paths to vectors of comments for that file.
+pub fn group_comments_by_file(comments: Vec<Comment>) -> HashMap<String, Vec<Comment>> {
+    let mut grouped: HashMap<String, Vec<Comment>> = HashMap::new();
+    for comment in comments {
+        grouped
+            .entry(comment.path.clone())
+            .or_default()
+            .push(comment);
+    }
+    grouped
+}
+
+const REVIEW_HEADER: &str = r###"# Review comments
+
+Please address the following review comments. The comments are given as inline
+comments inside code blocks. They use the comment format of the language of the
+commented file. Each comment is wrapped in "<review>" tags.
+
+For example, a Rust file may look like:
+
+```rust
+fn main() {
+    println!("13");
+    // <review>
+    // Please use 42 as the number
+    // </review>
+}
+```
+"###;
+
 /// Writes grouped PR review comments as markdown with inline code blocks.
 ///
 /// This is the core formatting engine that generates markdown output designed for
@@ -13,11 +54,14 @@ use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
 /// - Parses diff hunks to extract line numbers
 /// - Applies intelligent truncation for large diffs (shows context around commented lines)
 /// - Generates markdown code blocks with language-specific syntax highlighting
-/// - Embeds comments as inline code comments using `<review user="...">` XML tags
+/// - Embeds comments as inline code comments using `<review>` XML tags
 ///
 /// Comments are embedded at the appropriate line numbers within the code. Comments
 /// without line numbers appear at the top of the code block. Large diffs are
 /// truncated to show only 5 lines of context before/after commented lines.
+///
+/// Global comments (with path `__global__`) are rendered as a "General Comments"
+/// section at the top.
 ///
 /// # Arguments
 ///
@@ -25,12 +69,19 @@ use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
 /// * `grouped_comments` - Comments grouped by file path (from [`group_comments_by_file`])
 pub fn write_comments_as_markdown(
     writer: &mut impl Write,
-    grouped_comments: HashMap<String, Vec<Comment>>,
+    mut grouped_comments: HashMap<String, Vec<Comment>>,
 ) -> std::io::Result<()> {
-    writeln!(writer, "# Pull Request Review Comments")?;
-    writeln!(writer)?;
-    writeln!(writer, "Please address the following review comments:")?;
-    writeln!(writer)?;
+    writeln!(writer, "{REVIEW_HEADER}")?;
+
+    // Handle global comments separately
+    if let Some(global_comments) = grouped_comments.remove("__global__") {
+        writeln!(writer, "## General Comments")?;
+        writeln!(writer)?;
+        for comment in &global_comments {
+            writeln!(writer, "{body}", body = comment.body)?;
+            writeln!(writer)?;
+        }
+    }
 
     let mut files: Vec<_> = grouped_comments.keys().collect();
     files.sort();
@@ -85,8 +136,12 @@ pub fn write_comments_as_markdown(
                 .collect();
 
             if !line_nums.is_empty() {
-                let min_line = *line_nums.iter().min().unwrap();
-                let max_line = *line_nums.iter().max().unwrap();
+                let Some(min_line) = line_nums.iter().min().copied() else {
+                    unreachable!("line_nums is non-empty");
+                };
+                let Some(max_line) = line_nums.iter().max().copied() else {
+                    unreachable!("line_nums is non-empty");
+                };
 
                 if min_line == max_line {
                     writeln!(writer, "## `{file_path}` - Line {min_line}")?;
@@ -153,7 +208,7 @@ fn get_indentation(line: &str) -> String {
 /// Writes a comment with language-specific comment syntax.
 ///
 /// Formats a comment with the appropriate prefix/suffix for the language,
-/// wrapping it in `<review user="...">` XML tags.
+/// wrapping it in `<review>` XML tags.
 ///
 /// # Arguments
 ///
@@ -169,11 +224,7 @@ fn write_comment(
     prefix: &str,
     suffix: &str,
 ) -> std::io::Result<()> {
-    let user_login = &comment.user.login;
-    writeln!(
-        writer,
-        "{indentation}{prefix} <review user=\"{user_login}\">{suffix}"
-    )?;
+    writeln!(writer, "{indentation}{prefix} <review>{suffix}")?;
 
     for line in comment.body.lines() {
         if line.is_empty() {
@@ -204,20 +255,8 @@ pub fn write_issue_as_markdown(writer: &mut impl Write, issue: &Issue) -> std::i
     )?;
     writeln!(writer)?;
 
-    writeln!(writer, "- **State:** {state}", state = issue.state)?;
-
-    if let Some(author) = &issue.author {
-        writeln!(writer, "- **Author:** @{login}", login = author.login)?;
-    }
-
-    writeln!(
-        writer,
-        "- **Created:** {created}",
-        created = issue.created_at
-    )?;
-
     if !issue.labels.is_empty() {
-        write!(writer, "- **Labels:** ")?;
+        write!(writer, "**Labels:** ")?;
         for (idx, label) in issue.labels.iter().enumerate() {
             if idx != 0 {
                 write!(writer, ", {name}", name = label.name)?;

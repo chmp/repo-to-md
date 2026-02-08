@@ -1,0 +1,12 @@
+---
+source: repo-to-md/src/tests.rs
+expression: "String::from_utf8(output).expect(\"utf8\")"
+snapshot_kind: text
+---
+# Issue #99: Bug: Application crashes on startup
+
+**Labels:** bug
+
+## Description
+
+*No description provided.*

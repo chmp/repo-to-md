@@ -1,7 +1,8 @@
 ---
 source: repo-to-md/src/apply.rs
 expression: result
+snapshot_kind: text
 ---
-  <!-- <review user="reviewer"> -->
+  <!-- <review> -->
   <!-- Add alt text -->
   <!-- </review> -->

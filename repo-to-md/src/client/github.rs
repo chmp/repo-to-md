@@ -117,6 +117,7 @@ impl FetchReviewCommentsClient for GithubClient {
                 ... on PullRequestReview {
                   comments(first: 100) {
                     nodes {
+                      id
                       body
                       path
                       line
@@ -149,6 +150,7 @@ impl FetchReviewCommentsClient for GithubClient {
             .nodes
             .into_iter()
             .map(|gc| Comment {
+                id: gc.id,
                 path: gc.path,
                 line: gc.line,
                 body: gc.body,
@@ -241,7 +243,6 @@ impl FetchIssueClient for GithubClient {
             body: issue_node.body,
             author: issue_node.author.map(|a| User { login: a.login }),
             state: issue_node.state,
-            created_at: issue_node.created_at,
             labels: issue_node
                 .labels
                 .nodes
@@ -345,6 +346,7 @@ struct Viewer {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GraphQLComment {
+    id: String,
     body: String,
     path: String,
     line: Option<u32>,
@@ -410,7 +412,6 @@ struct IssueNode {
     body: Option<String>,
     author: Option<GraphQLAuthor>,
     state: String,
-    created_at: String,
     labels: LabelConnection,
 }
 

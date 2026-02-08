@@ -1,10 +1,11 @@
 ---
 source: repo-to-md/src/tests.rs
 expression: content
+snapshot_kind: text
 ---
 fn hello() {
     println!("Hello");
-    // <review user="reviewer">
+    // <review>
     // Add error handling
     // </review>
 }

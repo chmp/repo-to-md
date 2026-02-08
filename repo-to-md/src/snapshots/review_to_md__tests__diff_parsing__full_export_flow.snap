@@ -1,0 +1,34 @@
+---
+source: repo-to-md/src/tests.rs
+expression: markdown
+snapshot_kind: text
+---
+# Review comments
+
+Please address the following review comments. The comments are given as inline
+comments inside code blocks. They use the comment format of the language of the
+commented file. Each comment is wrapped in "<review>" tags.
+
+For example, a Rust file may look like:
+
+```rust
+fn main() {
+    println!("13");
+    // <review>
+    // Please use 42 as the number
+    // </review>
+}
+```
+
+## `src/lib.rs` - Lines 8-12
+
+```rust
+fn main() {
+    println!("Hello");
+    let x = 42;
+    // <review>
+    // Consider using a constant here
+    // </review>
+    let y = 100;
+}
+```

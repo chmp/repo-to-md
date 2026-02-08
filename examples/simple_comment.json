@@ -1,9 +1,0 @@
-[
-  {
-    "path": "src/lib.rs",
-    "line": 10,
-    "body": "This should return a Result instead",
-    "diff_hunk": "@@ -8,4 +8,6 @@\n fn main() {\n     println!(\"Hello\");\n+    let x = 42;\n }\n",
-    "user": {"login": "reviewer"}
-  }
-]

@@ -30,9 +30,6 @@ pub struct Review {
     pub state: String,
     /// The body/description of the review
     pub body: Option<String>,
-    /// When the review was created
-    #[serde(rename = "createdAt")]
-    pub created_at: String,
     /// Comment count information
     pub comments: CommentCount,
 }
@@ -49,6 +46,8 @@ pub struct CommentCount {
 /// comment text, diff context, and the user who made the comment.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Comment {
+    /// The comment ID (GitHub node ID for PR comments, UUID for local comments)
+    pub id: String,
     /// The file path relative to the repository root
     pub path: String,
     /// The line number in the new version of the file (None for general comments)
@@ -93,8 +92,6 @@ pub struct Issue {
     pub author: Option<User>,
     /// The state of the issue (OPEN, CLOSED)
     pub state: String,
-    /// When the issue was created
-    pub created_at: String,
     /// Labels applied to the issue
     #[serde(default)]
     pub labels: Vec<Label>,
