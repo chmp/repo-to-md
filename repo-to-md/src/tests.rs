@@ -68,6 +68,25 @@ mod diff_parsing {
     }
 
     #[test]
+    fn diff_with_frontmatter() {
+        let diff_text = r#"diff --git a/docs/index.md b/docs/index.md
+index a5cca6c..a3f8e62 100644
+--- a/docs/index.md
++++ b/docs/index.md
+@@ -187,6 +187,65 @@ indenting continuation lines:
+     - And even a list item
+ ```
+
++```markdown
+++++
++bibliography = "references.toml"
+++++
++"#;
+        let parsed = SideBySideDiff::parse(diff_text);
+        assert_snapshot!(parsed.files[0].hunks[0].to_new());
+    }
+
+    #[test]
     fn test_full_export_flow() {
         use crate::client::{Comment, User};
         use crate::formatting::write_comments_as_markdown;

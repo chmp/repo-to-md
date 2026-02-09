@@ -129,6 +129,19 @@ impl DiffHunk {
 
         result
     }
+
+    #[allow(unused)]
+    pub fn to_new(&self) -> String {
+        let mut result = String::new();
+        for line in &self.rows {
+            let Some(content) = &line.new_line else {
+                continue;
+            };
+            result.push_str(&content.content);
+            result.push('\n');
+        }
+        result
+    }
 }
 
 impl SideBySideDiff {
@@ -160,8 +173,6 @@ enum DiffLineKind {
     Deleted,
     /// Context line (starts with space or is plain text)
     Context,
-    /// Lines to skip: file markers ('+++', '---') or special markers ('\')
-    Skip,
 }
 
 /// Result of checking whether a line should be included in the output.
@@ -184,9 +195,7 @@ fn parse_starting_line_number(header: &str) -> Option<u32> {
 
 /// Classify a diff line to determine how it should be processed.
 fn classify_diff_line(line: &str) -> DiffLineKind {
-    if line.starts_with("+++") || line.starts_with("---") || line.starts_with('\\') {
-        DiffLineKind::Skip
-    } else if line.starts_with('+') {
+    if line.starts_with('+') {
         DiffLineKind::Added
     } else if line.starts_with('-') {
         DiffLineKind::Deleted
@@ -225,23 +234,13 @@ fn check_line_in_range(
 /// - Added/deleted lines: strip the leading '+' or '-'
 /// - Context lines: strip the leading space if present
 fn extract_line_content(line: &str, kind: &DiffLineKind) -> String {
-    match kind {
-        DiffLineKind::Added | DiffLineKind::Deleted => {
-            if line.len() > 1 {
-                line[1..].to_string()
-            } else {
-                String::new()
-            }
-        }
-        DiffLineKind::Context => {
-            if line.starts_with(' ') && line.len() > 1 {
-                line[1..].to_string()
-            } else {
-                line.to_string()
-            }
-        }
-        DiffLineKind::Skip => String::new(),
-    }
+    let prefix = match kind {
+        DiffLineKind::Added => '+',
+        DiffLineKind::Deleted => '-',
+        DiffLineKind::Context => ' ',
+    };
+
+    line.strip_prefix(prefix).unwrap_or(line).to_string()
 }
 
 /// Parses a unified diff hunk and extracts lines with their line numbers.
@@ -275,10 +274,6 @@ pub(crate) fn parse_diff_hunk_with_line_numbers(
 
     for line in lines {
         let kind = classify_diff_line(line);
-
-        if matches!(kind, DiffLineKind::Skip) {
-            continue;
-        }
 
         // Check range filtering
         match check_line_in_range(current_new_line, line_range, truncated_start) {
@@ -490,7 +485,6 @@ impl DiffParser {
             DiffLineKind::Context => {
                 hunk.add_line(Some(&content), Some(&content), LineType::Context)
             }
-            DiffLineKind::Skip => {}
         }
     }
 
