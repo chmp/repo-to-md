@@ -29,7 +29,7 @@ mod comment_syntax {
 mod diff_parsing {
     use insta::assert_snapshot;
 
-    use crate::diff::SideBySideDiff;
+    use crate::diff::{FileStatus, LineType, SideBySideDiff};
 
     #[test]
     fn test_to_unified_roundtrip() {
@@ -101,6 +101,165 @@ index 257cc56..0000000
         assert_eq!(parsed.files[0].old_path.as_deref(), Some("test example.md"));
         assert_eq!(parsed.files[0].path, "/dev/null");
         assert_snapshot!(parsed.files[0].hunks[0].to_new());
+    }
+
+    #[test]
+    fn diff_multiple_files() {
+        let diff_text = r#"diff --git a/src/foo.rs b/src/foo.rs
+--- a/src/foo.rs
++++ b/src/foo.rs
+@@ -1,3 +1,4 @@
+ fn foo() {
++    let x = 1;
+ }
+diff --git a/src/bar.rs b/src/bar.rs
+--- a/src/bar.rs
++++ b/src/bar.rs
+@@ -1,3 +1,4 @@
+ fn bar() {
++    let y = 2;
+ }
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        assert_eq!(parsed.files.len(), 2);
+        assert_eq!(parsed.files[0].path, "src/foo.rs");
+        assert_eq!(parsed.files[1].path, "src/bar.rs");
+        assert_snapshot!("multiple_files_foo", parsed.files[0].hunks[0].to_unified());
+        assert_snapshot!("multiple_files_bar", parsed.files[1].hunks[0].to_unified());
+    }
+
+    #[test]
+    fn diff_multiple_hunks() {
+        let diff_text = r#"diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ fn first() {
++    let a = 1;
+ }
+@@ -10,3 +11,4 @@
+ fn second() {
++    let b = 2;
+ }
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        assert_eq!(parsed.files.len(), 1);
+        assert_eq!(parsed.files[0].hunks.len(), 2);
+        assert_eq!(parsed.files[0].hunks[0].new_start, 1);
+        assert_eq!(parsed.files[0].hunks[1].new_start, 11);
+    }
+
+    #[test]
+    fn diff_renamed_file() {
+        let diff_text = r#"diff --git a/old/path.rs b/new/path.rs
+similarity index 85%
+rename from old/path.rs
+rename to new/path.rs
+--- a/old/path.rs
++++ b/new/path.rs
+@@ -1,3 +1,3 @@
+ fn example() {
+-    old_call();
++    new_call();
+ }
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        assert_eq!(parsed.files.len(), 1);
+        assert_eq!(parsed.files[0].path, "new/path.rs");
+        assert_eq!(parsed.files[0].old_path.as_deref(), Some("old/path.rs"));
+        assert_eq!(parsed.files[0].status, FileStatus::Renamed);
+        assert_snapshot!(parsed.files[0].hunks[0].to_unified());
+    }
+
+    #[test]
+    fn diff_row_line_numbers() {
+        // @@ -5,5 +5,5 @@ means old starts at 5, new starts at 5
+        // one context, one delete, one add, one context -> old: 5,6,_,7 / new: 5,_,6,7
+        let diff_text = r#"diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -5,4 +5,4 @@
+ context_a
+-deleted_b
++added_b
+ context_c
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        let rows = &parsed.files[0].hunks[0].rows;
+
+        // context_a: both sides at line 5
+        let row = &rows[0];
+        assert_eq!(row.old_line.as_ref().unwrap().number, 5);
+        assert_eq!(row.new_line.as_ref().unwrap().number, 5);
+
+        // deleted_b: only old side at line 6
+        let row = &rows[1];
+        assert_eq!(row.old_line.as_ref().unwrap().number, 6);
+        assert!(row.new_line.is_none());
+
+        // added_b: only new side at line 6
+        let row = &rows[2];
+        assert!(row.old_line.is_none());
+        assert_eq!(row.new_line.as_ref().unwrap().number, 6);
+
+        // context_c: old at 7, new at 7
+        let row = &rows[3];
+        assert_eq!(row.old_line.as_ref().unwrap().number, 7);
+        assert_eq!(row.new_line.as_ref().unwrap().number, 7);
+    }
+
+    #[test]
+    fn diff_row_line_types() {
+        let diff_text = r#"diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,3 @@
+ context
+-deleted
++added
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        let rows = &parsed.files[0].hunks[0].rows;
+
+        assert_eq!(
+            rows[0].old_line.as_ref().unwrap().line_type,
+            LineType::Context
+        );
+        assert_eq!(
+            rows[0].new_line.as_ref().unwrap().line_type,
+            LineType::Context
+        );
+        assert_eq!(
+            rows[1].old_line.as_ref().unwrap().line_type,
+            LineType::Deletion
+        );
+        assert!(rows[1].new_line.is_none());
+        assert!(rows[2].old_line.is_none());
+        assert_eq!(
+            rows[2].new_line.as_ref().unwrap().line_type,
+            LineType::Addition
+        );
+    }
+
+    #[test]
+    fn diff_to_unified_with_deletion() {
+        let diff_text = r#"diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,4 +1,3 @@
+ fn main() {
+-    let unused = 42;
+     println!("Hello");
+ }
+"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        assert_snapshot!(parsed.files[0].hunks[0].to_unified());
     }
 
     #[test]

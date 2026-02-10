@@ -1,0 +1,10 @@
+---
+source: repo-to-md/src/tests.rs
+expression: "parsed.files[0].hunks[0].to_unified()"
+snapshot_kind: text
+---
+@@ -1,4 +1,3 @@
+ fn main() {
+-    let unused = 42;
+     println!("Hello");
+ }
