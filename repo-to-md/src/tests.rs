@@ -29,22 +29,7 @@ mod comment_syntax {
 mod diff_parsing {
     use insta::assert_snapshot;
 
-    use crate::diff::{SideBySideDiff, extract_code_from_diff_hunk};
-
-    #[test]
-    fn test_extract_code_from_diff_hunk() {
-        let diff_hunk = r#"@@ -55,6 +59,8 @@ pub struct BuildConfig {
-     pub output: Option<PathBuf>,
-     pub document_store: ObjectStore,
-     pub object_stores: BTreeMap<String, ObjectStore>,
-+    /// HTML sanitization configuration
-+    pub sanitizer: SanitizerConfig,"#;
-
-        let result = extract_code_from_diff_hunk(diff_hunk);
-        let result = result.join("\n");
-
-        assert_snapshot!(result);
-    }
+    use crate::diff::SideBySideDiff;
 
     #[test]
     fn test_to_unified_roundtrip() {
@@ -59,7 +44,7 @@ mod diff_parsing {
  }
 "#;
 
-        let parsed = SideBySideDiff::parse(diff_text);
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
         assert_eq!(parsed.files.len(), 1);
         assert_eq!(parsed.files[0].hunks.len(), 1);
 
@@ -82,7 +67,39 @@ index a5cca6c..a3f8e62 100644
 +bibliography = "references.toml"
 ++++
 +"#;
-        let parsed = SideBySideDiff::parse(diff_text);
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        assert_snapshot!(parsed.files[0].hunks[0].to_new());
+    }
+
+    #[test]
+    fn diff_with_spaces_in_filename() {
+        let diff_text = r#"diff --git a/test example.md b/test example.md
+new file mode 100644
+index 0000000..257cc56
+--- /dev/null
++++ b/test example.md
+@@ -0,0 +1 @@
++foo"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        assert_eq!(parsed.files[0].old_path.as_deref(), Some("/dev/null"));
+        assert_eq!(parsed.files[0].path, "test example.md");
+        assert_snapshot!(parsed.files[0].hunks[0].to_new());
+    }
+
+    #[test]
+    fn diff_with_deleted_file() {
+        let diff_text = r#"diff --git a/test example.md b/test example.md
+deleted file mode 100644
+index 257cc56..0000000
+--- a/test example.md
++++ /dev/null
+@@ -1 +0,0 @@
+-foo"#;
+
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        assert_eq!(parsed.files[0].old_path.as_deref(), Some("test example.md"));
+        assert_eq!(parsed.files[0].path, "/dev/null");
         assert_snapshot!(parsed.files[0].hunks[0].to_new());
     }
 
@@ -103,7 +120,7 @@ index a5cca6c..a3f8e62 100644
  }
 "#;
 
-        let parsed = SideBySideDiff::parse(diff_text);
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
         let unified = parsed.files[0].hunks[0].to_unified();
 
         let comment = Comment {

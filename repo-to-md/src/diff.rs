@@ -1,3 +1,4 @@
+use anyhow::{Result, anyhow, bail};
 /// Diff parsing utilities for handling unified diff format.
 use serde::{Deserialize, Serialize};
 
@@ -80,12 +81,9 @@ impl SideBySideDiff {
     ///
     /// This parses the complete output of `git diff` and converts it to a
     /// structured format suitable for rendering in a side-by-side view.
-    pub fn parse(source: &str) -> Self {
-        let mut parser = DiffParser::new();
-        for line in source.lines() {
-            parser.process_line(line);
-        }
-        parser.finish()
+    pub fn parse(source: &str) -> Result<Self> {
+        let (files, _trailing) = try_parse_many(source, parse_file)?;
+        Ok(SideBySideDiff { files })
     }
 }
 
@@ -157,11 +155,7 @@ impl SideBySideDiff {
             }
         }
 
-        // If not found in exact range, return the closest hunk
-        file.hunks.iter().min_by_key(|h| {
-            let mid = h.new_start + h.new_count / 2;
-            (mid as i64 - line as i64).unsigned_abs()
-        })
+        None
     }
 }
 
@@ -183,6 +177,29 @@ enum RangeCheckResult {
     BeforeRange,
     /// Line is after the range end
     AfterRange,
+}
+
+/// Strip the `a/` or `b/` prefix from a diff path, returning the remainder.
+///
+/// Paths like `/dev/null` or other absolute paths are returned unchanged.
+fn parse_diff_path_line<'source>(
+    source: &'source str,
+    prefix: &str,
+) -> Result<(&'source str, &'source str)> {
+    let Some((line, rest)) = parse_line(source) else {
+        bail!("missing path diff line");
+    };
+    let Some(line) = line.strip_prefix(prefix) else {
+        bail!("missing {prefix}");
+    };
+    let path = line.trim();
+    if let Some(p) = path.strip_prefix("a/") {
+        Ok((p, rest))
+    } else if let Some(p) = path.strip_prefix("b/") {
+        Ok((p, rest))
+    } else {
+        Ok((path, rest))
+    }
 }
 
 /// Parse the starting line number from a diff hunk's @@ header.
@@ -286,13 +303,14 @@ pub(crate) fn parse_diff_hunk_with_line_numbers(
             }
             RangeCheckResult::Include => {
                 let content = extract_line_content(line, &kind);
-                let line_number = match kind {
-                    DiffLineKind::Deleted => None,
-                    _ => current_new_line,
+                let new_line_number = if !matches!(kind, DiffLineKind::Deleted) {
+                    current_new_line
+                } else {
+                    None
                 };
                 diff_lines.push(DiffLine {
                     content,
-                    new_line_number: line_number,
+                    new_line_number,
                 });
             }
         }
@@ -347,160 +365,6 @@ pub(crate) fn calculate_context_range(
     Some((start, end))
 }
 
-/// Extracts code lines from a unified diff hunk.
-///
-/// Processes a diff hunk to extract only the code lines, excluding diff metadata
-/// and deleted lines. Added lines (starting with '+') have the '+' prefix removed.
-/// Context lines are included as-is.
-///
-/// This function is primarily used for testing.
-///
-/// # Arguments
-///
-/// * `diff_hunk` - A unified diff hunk string (starting with "@@")
-///
-/// # Returns
-///
-/// A vector of code line strings with diff markers removed.
-#[cfg(test)]
-pub(crate) fn extract_code_from_diff_hunk(diff_hunk: &str) -> Vec<String> {
-    let mut code_lines = Vec::new();
-
-    for line in diff_hunk.lines() {
-        if line.starts_with("@@") {
-            continue;
-        }
-
-        if line.starts_with('+') && !line.starts_with("+++") {
-            code_lines.push(line[1..].to_string());
-        } else if line.starts_with('-') && !line.starts_with("---") {
-            continue;
-        } else if !line.starts_with('\\') {
-            code_lines.push(line.to_string());
-        }
-    }
-
-    code_lines
-}
-
-/// Parser state for processing git diff output line by line.
-struct DiffParser {
-    files: Vec<FileDiff>,
-    current_file: Option<FileDiff>,
-    current_hunk: Option<HunkBuilder>,
-}
-
-impl DiffParser {
-    fn new() -> Self {
-        DiffParser {
-            files: Vec::new(),
-            current_file: None,
-            current_hunk: None,
-        }
-    }
-
-    fn process_line(&mut self, line: &str) {
-        if line.starts_with("diff --git") {
-            self.start_new_file(line);
-        } else if line.starts_with("@@") {
-            self.start_new_hunk(line);
-        } else if self.current_hunk.is_some() {
-            self.process_diff_line(line);
-        } else {
-            self.process_header_line(line);
-        }
-    }
-
-    fn start_new_file(&mut self, line: &str) {
-        // Save the previous file if any
-        if let Some(mut file) = self.current_file.take() {
-            if let Some(hunk) = self.current_hunk.take() {
-                file.hunks.push(hunk.build());
-            }
-            self.files.push(file);
-        }
-
-        // Parse the file paths from "diff --git a/path b/path"
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 4 {
-            let old_path = parts[2].strip_prefix("a/").unwrap_or(parts[2]);
-            let new_path = parts[3].strip_prefix("b/").unwrap_or(parts[3]);
-
-            self.current_file = Some(FileDiff {
-                path: new_path.to_string(),
-                old_path: if old_path != new_path {
-                    Some(old_path.to_string())
-                } else {
-                    None
-                },
-                status: FileStatus::Modified,
-                hunks: Vec::new(),
-            });
-        }
-    }
-
-    fn start_new_hunk(&mut self, line: &str) {
-        if let Some(ref mut file) = self.current_file {
-            // Save previous hunk
-            if let Some(hunk) = self.current_hunk.take() {
-                file.hunks.push(hunk.build());
-            }
-
-            // Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
-            if let Some(hunk_info) = parse_hunk_header(line) {
-                self.current_hunk = Some(HunkBuilder::new(hunk_info, line.to_string()));
-            }
-        }
-    }
-
-    fn process_header_line(&mut self, line: &str) {
-        // Skip --- and +++ header lines
-        if line.starts_with("---") || line.starts_with("+++") {
-            return;
-        }
-
-        // Check for file status markers
-        if let Some(ref mut file) = self.current_file {
-            if line.starts_with("new file mode") {
-                file.status = FileStatus::Added;
-            } else if line.starts_with("deleted file mode") {
-                file.status = FileStatus::Deleted;
-            } else if line.starts_with("rename from") {
-                file.status = FileStatus::Renamed;
-            }
-        }
-    }
-
-    fn process_diff_line(&mut self, line: &str) {
-        let Some(ref mut hunk) = self.current_hunk else {
-            return;
-        };
-
-        let kind = classify_diff_line(line);
-        let content = extract_line_content(line, &kind);
-
-        match kind {
-            DiffLineKind::Added => hunk.add_line(None, Some(&content), LineType::Addition),
-            DiffLineKind::Deleted => hunk.add_line(Some(&content), None, LineType::Deletion),
-            DiffLineKind::Context => {
-                hunk.add_line(Some(&content), Some(&content), LineType::Context)
-            }
-        }
-    }
-
-    fn finish(mut self) -> SideBySideDiff {
-        // Don't forget the last file
-        if let Some(mut file) = self.current_file {
-            if let Some(hunk) = self.current_hunk {
-                file.hunks.push(hunk.build());
-            }
-            self.files.push(file);
-        }
-
-        SideBySideDiff { files: self.files }
-    }
-}
-
 /// Hunk header info (line numbers and counts)
 struct HunkInfo {
     old_start: u32,
@@ -542,135 +406,317 @@ fn parse_range(range: &str) -> (u32, u32) {
     }
 }
 
-/// Helper for building a hunk with proper line number tracking
-struct HunkBuilder {
-    info: HunkInfo,
-    header: String,
-    rows: Vec<DiffRow>,
-    old_line: u32,
-    new_line: u32,
-    pending_deletions: Vec<LineInfo>,
+/// Parse the next file diff in source.
+///
+/// Advances past the `diff --git` header line, reads status from header lines,
+/// then uses the `---` and `+++` lines to determine the old and new file paths.
+///
+/// Returns `Ok(None)` when no more `diff --git` headers are found.
+fn parse_file(source: &str) -> Result<Option<(FileDiff, &str)>> {
+    let Some((header, rest)) = parse_diff_header(source)? else {
+        return Ok(None);
+    };
+
+    let (hunks, rest) = try_parse_many(rest, parse_hunk)?;
+    let file = FileDiff {
+        path: header.new_path,
+        old_path: header.old_path,
+        status: header.status,
+        hunks,
+    };
+
+    Ok(Some((file, rest)))
 }
 
-impl HunkBuilder {
-    fn new(info: HunkInfo, header: String) -> Self {
-        let old_line = info.old_start;
-        let new_line = info.new_start;
-        HunkBuilder {
-            info,
-            header,
-            rows: Vec::new(),
-            old_line,
-            new_line,
-            pending_deletions: Vec::new(),
+struct DiffHeader {
+    status: FileStatus,
+    old_path: Option<String>,
+    new_path: String,
+}
+
+fn parse_diff_header(source: &str) -> Result<Option<(DiffHeader, &str)>> {
+    let Some(rest) = parse_diff_header_start(source) else {
+        return Ok(None);
+    };
+    let (status, rest) = parse_status(rest)?;
+    let (old_path, rest) = parse_diff_path_line(rest, "---")?;
+    let (new_path, rest) = parse_diff_path_line(rest, "+++")?;
+
+    let header = DiffHeader {
+        old_path: if old_path != new_path {
+            Some(old_path.to_string())
+        } else {
+            None
+        },
+        new_path: new_path.to_string(),
+        status,
+    };
+
+    Ok(Some((header, rest)))
+}
+
+fn parse_diff_header_start(source: &str) -> Option<&str> {
+    let (line, rest) = parse_line(source)?;
+    if !line.starts_with("diff --git") {
+        None
+    } else {
+        Some(rest)
+    }
+}
+
+fn parse_status(source: &str) -> Result<(FileStatus, &str)> {
+    let mut status = FileStatus::Modified;
+    let mut rest = source;
+    loop {
+        let Some((line, trailing)) = parse_line(rest) else {
+            bail!("Incorrect diff header");
+        };
+
+        if line.starts_with("---") {
+            break;
+        }
+
+        rest = trailing;
+
+        if line.starts_with("new file mode") {
+            status = FileStatus::Added;
+        } else if line.starts_with("deleted file mode") {
+            status = FileStatus::Deleted;
+        } else if line.starts_with("rename from") {
+            status = FileStatus::Renamed;
         }
     }
 
-    fn add_line(
-        &mut self,
-        old_content: Option<&str>,
-        new_content: Option<&str>,
-        line_type: LineType,
-    ) {
-        match line_type {
-            LineType::Context => {
-                // Flush any pending deletions first
-                self.flush_pending_deletions();
+    Ok((status, rest))
+}
 
-                let old_info = old_content.map(|c| LineInfo {
-                    number: self.old_line,
-                    content: c.to_string(),
-                    line_type: LineType::Context,
-                    highlighted_html: None,
-                });
-                let new_info = new_content.map(|c| LineInfo {
-                    number: self.new_line,
-                    content: c.to_string(),
-                    line_type: LineType::Context,
-                    highlighted_html: None,
-                });
+/// Parse the next hunk in source
+///
+/// Returns
+///
+/// - `Ok(None)` if source does not start with a hunk
+/// - `Ok((hunk, trailing))` if the hunk was parsed successfully
+fn parse_hunk(source: &str) -> Result<Option<(DiffHunk, &str)>> {
+    let Some(((info, header), rest)) = parse_hunk_header_line(source)? else {
+        return Ok(None);
+    };
 
-                self.rows.push(DiffRow {
-                    old_line: old_info,
-                    new_line: new_info,
-                });
+    let mut rows = Vec::new();
 
-                if old_content.is_some() {
-                    self.old_line += 1;
-                }
-                if new_content.is_some() {
-                    self.new_line += 1;
-                }
-            }
-            LineType::Deletion => {
-                // Queue deletion for potential side-by-side pairing with addition
-                if let Some(content) = old_content {
-                    self.pending_deletions.push(LineInfo {
-                        number: self.old_line,
-                        content: content.to_string(),
-                        line_type: LineType::Deletion,
-                        highlighted_html: None,
-                    });
-                    self.old_line += 1;
-                }
-            }
-            LineType::Addition => {
-                // Try to pair with a pending deletion
-                if let Some(deletion) = self.pending_deletions.pop() {
-                    // Create a side-by-side row (modified line)
-                    let new_info = new_content.map(|c| LineInfo {
-                        number: self.new_line,
-                        content: c.to_string(),
-                        line_type: LineType::Addition,
-                        highlighted_html: None,
-                    });
+    let mut rest = rest;
+    let mut old_line = info.old_start;
+    let mut new_line = info.new_start;
+    loop {
+        let Some((row, new_rest)) = parse_diff_row(rest, old_line, new_line) else {
+            break;
+        };
+        rest = new_rest;
 
-                    self.rows.push(DiffRow {
-                        old_line: Some(deletion),
-                        new_line: new_info,
-                    });
+        if row.old_line.is_some() {
+            old_line += 1;
+        }
+        if row.new_line.is_some() {
+            new_line += 1;
+        }
+        rows.push(row);
+    }
+
+    let hunk = DiffHunk {
+        old_start: info.old_start,
+        old_count: info.old_count,
+        new_start: info.new_start,
+        new_count: info.new_count,
+        header: header.to_string(),
+        rows,
+    };
+
+    Ok(Some((hunk, rest)))
+}
+
+/// Parse the next hunk header line
+///
+/// Returns
+///
+/// - `Ok(None)` if source does not start with a hunk header
+/// - `Ok(Some((info, header_line), trailing))` if the header could be parsed
+fn parse_hunk_header_line(source: &str) -> Result<Option<((HunkInfo, &str), &str)>> {
+    let Some((header, rest)) = parse_line(source) else {
+        return Ok(None);
+    };
+
+    let Some(line) = header.strip_prefix("@@") else {
+        return Ok(None);
+    };
+
+    let line = line.trim_start();
+    let line = parse_required(line, '-')?;
+    let (start_range, line) = parse_line_range(line)?;
+
+    let line = line.trim_start();
+    let line = parse_required(line, '+')?;
+    let (end_range, line) = parse_line_range(line)?;
+    let line = line.trim_start();
+    let line = parse_required(line, "@@")?;
+
+    // ignore the context
+    let _ = line;
+
+    let info = HunkInfo {
+        old_start: start_range.0,
+        old_count: start_range.1,
+        new_start: end_range.0,
+        new_count: end_range.1,
+    };
+
+    Ok(Some(((info, header), rest)))
+}
+
+fn parse_diff_row(source: &str, old_line: u32, new_line: u32) -> Option<(DiffRow, &str)> {
+    let (line, rest) = parse_line(source)?;
+
+    let (old, new) = if line.is_empty() {
+        (Some(line), Some(line))
+    } else if let Some(line) = line.strip_prefix(' ') {
+        (Some(line), Some(line))
+    } else if let Some(line) = line.strip_prefix('-') {
+        (Some(line), None)
+    } else if let Some(line) = line.strip_prefix('+') {
+        (None, Some(line))
+    } else {
+        return None;
+    };
+
+    let row = match (old, new) {
+        (Some(old), Some(new)) => DiffRow {
+            old_line: Some(LineInfo {
+                number: old_line,
+                content: old.to_string(),
+                line_type: LineType::Context,
+                highlighted_html: None,
+            }),
+            new_line: Some(LineInfo {
+                number: new_line,
+                content: new.to_string(),
+                line_type: LineType::Context,
+                highlighted_html: None,
+            }),
+        },
+        (Some(old), None) => DiffRow {
+            old_line: Some(LineInfo {
+                number: old_line,
+                content: old.to_string(),
+                line_type: LineType::Deletion,
+                highlighted_html: None,
+            }),
+            new_line: None,
+        },
+        (None, Some(new)) => DiffRow {
+            old_line: None,
+            new_line: Some(LineInfo {
+                number: new_line,
+                content: new.to_string(),
+                line_type: LineType::Addition,
+                highlighted_html: None,
+            }),
+        },
+        (None, None) => unreachable!("either or both need to be some"),
+    };
+
+    Some((row, rest))
+}
+
+fn parse_required(source: &str, prefix: impl Prefix) -> Result<&str> {
+    let Some(rest) = prefix.strip_prefix(source) else {
+        bail!("missing prefix {}", prefix.display());
+    };
+    Ok(rest)
+}
+
+fn parse_line_range(source: &str) -> Result<((u32, u32), &str)> {
+    let (start, source) =
+        parse_integer(source)?.ok_or_else(|| anyhow!("mising required start line"))?;
+    let (count, source) = if let Some(source) = source.strip_prefix(',') {
+        parse_integer(source)?.ok_or_else(|| anyhow!("missing line count after ,"))?
+    } else {
+        (1, source)
+    };
+
+    Ok(((start, count), source))
+}
+
+fn parse_integer(source: &str) -> Result<Option<(u32, &str)>> {
+    let rest = source.trim_start_matches(|c: char| c.is_ascii_digit());
+    let Some(digit) = source.get(..source.len() - rest.len()) else {
+        unreachable!("prefix must be a valid utf8 slice");
+    };
+    if digit.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some((digit.parse::<u32>()?, rest)))
+}
+
+fn parse_line(source: &str) -> Option<(&str, &str)> {
+    if source.is_empty() {
+        None
+    } else {
+        Some(source.split_once('\n').unwrap_or((source, "")))
+    }
+}
+
+trait Prefix {
+    fn strip_prefix<'source>(&self, source: &'source str) -> Option<&'source str>;
+    fn display(&self) -> impl std::fmt::Display;
+}
+
+impl Prefix for char {
+    fn strip_prefix<'source>(&self, source: &'source str) -> Option<&'source str> {
+        source.strip_prefix(*self)
+    }
+
+    fn display(&self) -> impl std::fmt::Display {
+        std::fmt::from_fn(|f| std::fmt::Display::fmt(self, f))
+    }
+}
+
+impl Prefix for &[char] {
+    fn strip_prefix<'source>(&self, source: &'source str) -> Option<&'source str> {
+        source.strip_prefix(*self)
+    }
+
+    fn display(&self) -> impl std::fmt::Display {
+        std::fmt::from_fn(|f| {
+            write!(f, "[")?;
+            for (i, c) in self.iter().enumerate() {
+                if i == 0 {
+                    write!(f, "{c}")?;
                 } else {
-                    // No deletion to pair with, pure addition
-                    let new_info = new_content.map(|c| LineInfo {
-                        number: self.new_line,
-                        content: c.to_string(),
-                        line_type: LineType::Addition,
-                        highlighted_html: None,
-                    });
-
-                    self.rows.push(DiffRow {
-                        old_line: None,
-                        new_line: new_info,
-                    });
-                }
-
-                if new_content.is_some() {
-                    self.new_line += 1;
+                    write!(f, ", {c}")?;
                 }
             }
-        }
+            write!(f, "]")
+        })
+    }
+}
+
+impl Prefix for &str {
+    fn strip_prefix<'source>(&self, source: &'source str) -> Option<&'source str> {
+        source.strip_prefix(*self)
     }
 
-    fn flush_pending_deletions(&mut self) {
-        for deletion in self.pending_deletions.drain(..) {
-            self.rows.push(DiffRow {
-                old_line: Some(deletion),
-                new_line: None,
-            });
-        }
+    fn display(&self) -> impl std::fmt::Display {
+        std::fmt::from_fn(|f| std::fmt::Display::fmt(self, f))
     }
+}
 
-    fn build(mut self) -> DiffHunk {
-        // Flush any remaining deletions
-        self.flush_pending_deletions();
-
-        DiffHunk {
-            old_start: self.info.old_start,
-            old_count: self.info.old_count,
-            new_start: self.info.new_start,
-            new_count: self.info.new_count,
-            header: self.header,
-            rows: self.rows,
-        }
+fn try_parse_many<Parser, Item>(source: &str, mut parser: Parser) -> Result<(Vec<Item>, &str)>
+where
+    Parser: for<'source> FnMut(&'source str) -> Result<Option<(Item, &'source str)>>,
+{
+    let mut rest = source;
+    let mut items = Vec::new();
+    while let Some((item, new_rest)) = parser(rest)? {
+        items.push(item);
+        rest = new_rest;
     }
+    Ok((items, rest))
 }

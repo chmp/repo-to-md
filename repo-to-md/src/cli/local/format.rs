@@ -43,7 +43,7 @@ impl FormatCommand {
             return Ok(());
         }
 
-        let diff = SideBySideDiff::parse(&comments_file.raw_diff);
+        let diff = SideBySideDiff::parse(&comments_file.raw_diff)?;
 
         // Populate diff_hunk for comments that have line numbers
         let mut comments = comments_file.comments;

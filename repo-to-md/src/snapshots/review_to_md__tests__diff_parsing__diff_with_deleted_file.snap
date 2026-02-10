@@ -1,0 +1,6 @@
+---
+source: repo-to-md/src/tests.rs
+expression: "parsed.files[0].hunks[0].to_new()"
+snapshot_kind: text
+---
+
