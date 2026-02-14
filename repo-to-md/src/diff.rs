@@ -428,12 +428,19 @@ fn parse_file(source: &str) -> Result<Option<(FileDiff, &str)>> {
     Ok(Some((file, rest)))
 }
 
+/// Parsed content of a `diff --git` file header.
 struct DiffHeader {
     status: FileStatus,
     old_path: Option<String>,
     new_path: String,
 }
 
+/// Parse the header block of a single file diff.
+///
+/// Returns
+///
+/// - `Ok(None)` if source does not start with `diff --git`
+/// - `Ok(Some((header, trailing)))` on success
 fn parse_diff_header(source: &str) -> Result<Option<(DiffHeader, &str)>> {
     let Some(rest) = parse_diff_header_start(source) else {
         return Ok(None);
@@ -455,6 +462,7 @@ fn parse_diff_header(source: &str) -> Result<Option<(DiffHeader, &str)>> {
     Ok(Some((header, rest)))
 }
 
+/// Consume a `diff --git` line, returning the rest of source, or `None` if not found.
 fn parse_diff_header_start(source: &str) -> Option<&str> {
     let (line, rest) = parse_line(source)?;
     if !line.starts_with("diff --git") {
@@ -464,6 +472,8 @@ fn parse_diff_header_start(source: &str) -> Option<&str> {
     }
 }
 
+/// Parse the status lines between `diff --git` and `---`, returning the detected
+/// [`FileStatus`] and the source positioned at the `---` line.
 fn parse_status(source: &str) -> Result<(FileStatus, &str)> {
     let mut status = FileStatus::Modified;
     let mut rest = source;
@@ -571,6 +581,8 @@ fn parse_hunk_header_line(source: &str) -> Result<Option<((HunkInfo, &str), &str
     Ok(Some(((info, header), rest)))
 }
 
+/// Parse one diff body line into a [`DiffRow`], or return `None` if the line is
+/// not a valid diff line (context, `+`, or `-`).
 fn parse_diff_row(source: &str, old_line: u32, new_line: u32) -> Option<(DiffRow, &str)> {
     let (line, rest) = parse_line(source)?;
 
@@ -625,6 +637,7 @@ fn parse_diff_row(source: &str, old_line: u32, new_line: u32) -> Option<(DiffRow
     Some((row, rest))
 }
 
+/// Strip a required prefix from source, returning the remainder, or an error.
 fn parse_required(source: &str, prefix: impl Prefix) -> Result<&str> {
     let Some(rest) = prefix.strip_prefix(source) else {
         bail!("missing prefix {}", prefix.display());
@@ -632,6 +645,7 @@ fn parse_required(source: &str, prefix: impl Prefix) -> Result<&str> {
     Ok(rest)
 }
 
+/// Parse a `start` or `start,count` pair from source, returning `((start, count), rest)`.
 fn parse_line_range(source: &str) -> Result<((u32, u32), &str)> {
     let (start, source) =
         parse_integer(source)?.ok_or_else(|| anyhow!("mising required start line"))?;
@@ -644,6 +658,9 @@ fn parse_line_range(source: &str) -> Result<((u32, u32), &str)> {
     Ok(((start, count), source))
 }
 
+/// Consume a run of ASCII digits from the start of source.
+///
+/// Returns `Ok(None)` if source does not start with a digit.
 fn parse_integer(source: &str) -> Result<Option<(u32, &str)>> {
     let rest = source.trim_start_matches(|c: char| c.is_ascii_digit());
     let Some(digit) = source.get(..source.len() - rest.len()) else {
@@ -655,6 +672,7 @@ fn parse_integer(source: &str) -> Result<Option<(u32, &str)>> {
     Ok(Some((digit.parse::<u32>()?, rest)))
 }
 
+/// Split source at the first newline, returning `(line, rest)`, or `None` if source is empty.
 fn parse_line(source: &str) -> Option<(&str, &str)> {
     if source.is_empty() {
         None
@@ -708,6 +726,9 @@ impl Prefix for &str {
     }
 }
 
+/// Repeatedly apply `parser` until it returns `Ok(None)`, collecting all results.
+///
+/// Returns `(items, trailing)` where `trailing` is the unconsumed remainder.
 fn try_parse_many<Parser, Item>(source: &str, mut parser: Parser) -> Result<(Vec<Item>, &str)>
 where
     Parser: for<'source> FnMut(&'source str) -> Result<Option<(Item, &'source str)>>,
