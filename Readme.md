@@ -44,21 +44,22 @@ Example:
 repo-to-md review 78 --owner chmp --repo repo-to-md
 ```
 
-### Claude Code skills
+### AI Agent Skills
 
-This tool includes two Claude Code skills that enable natural language
-interaction with GitHub reviews and issues.
+This tool includes skills that enable natural language interaction with GitHub
+reviews and issues. The skills follow the [AgentSkills specification](https://agentskills.io/)
+and can be used by any compatible AI agent.
 
-**review-to-md** fetches and formats PR review comments. Claude Code will use
-this skill when you ask it to address review feedback. Example prompts that
+**review-to-md** fetches and formats PR review comments. AI agents can use
+this skill when addressing review feedback. Example prompts that
 trigger this skill:
 
 - "Please address my last review on GitHub"
 - "Implement the feedback from my PR review"
 - "Fix the issues mentioned in the code review"
 
-**issue-to-md** fetches and formats GitHub issues. Claude Code will use this
-skill when you ask it to work on an issue. Example prompts that trigger this
+**issue-to-md** fetches and formats GitHub issues. AI agents can use this
+skill when working on issues. Example prompts that trigger this
 skill:
 
 - "Please implement issue 67"
@@ -71,12 +72,15 @@ To install the skills, run:
 # Install globally (available in all projects)
 repo-to-md install
 
-# Install locally (project-specific, finds project root via .git or .claude)
+# Install locally (project-specific, finds project root via .git or .agents)
 repo-to-md install --local
+
+# Install to custom path
+repo-to-md install --path /custom/skills/directory
 ```
 
-Skills are installed to `~/.claude/skills/review-to-md/` (global) or
-`<project-root>/.claude/skills/review-to-md/` (local).
+Skills are installed to `~/.agents/skills/review-to-md/` (global) or
+`<project-root>/.agents/skills/review-to-md/` (local).
 
 ### Review selection options
 
