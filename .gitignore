@@ -8,6 +8,5 @@ explore_*.py
 explore_*.md
 tmp/
 *_output.md
-# tmpclaude-* (legacy, no longer needed)
 review-comments.md
 review-comments.json
