@@ -91,6 +91,7 @@ pub async fn bind_server(
     comments_file: PathBuf,
     diff: SideBySideDiff,
     raw_diff: String,
+    bind_address: &str,
 ) -> Result<BoundServer> {
     let app_state = AppState::new(refspec, comments_file.clone(), diff, raw_diff)?;
 
@@ -119,7 +120,7 @@ pub async fn bind_server(
         // Static assets (fallback to index.html for SPA routing)
         .fallback(serve_static);
 
-    let addr = format!("127.0.0.1:{}", port);
+    let addr = format!("{}:{}", bind_address, port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .context(format!("Failed to bind to {}", addr))?;
