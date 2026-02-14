@@ -87,7 +87,8 @@ impl ReviewCommand {
             .context("Failed to create tokio runtime")?
             .block_on(async {
                 let server =
-                    local::bind_server(refspec, self.port, self.output, diff, raw_diff, &self.bind).await?;
+                    local::bind_server(refspec, self.port, self.output, diff, raw_diff, &self.bind)
+                        .await?;
 
                 if should_open {
                     open_url(server.url());
