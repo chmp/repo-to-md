@@ -19,11 +19,15 @@ const SKILLS: &[(&str, &str)] = &[
 
 #[derive(FromArgs)]
 #[argh(subcommand, name = "install")]
-/// Install the repo-to-md skill for Claude Code
+/// Install the repo-to-md skill for AI agents
 pub struct InstallSkillCommand {
-    /// install to local project directory (finds project root via .git or .claude)
+    /// install to local project directory (finds project root via .git or .agents)
     #[argh(switch)]
     pub local: bool,
+
+    /// custom installation path (overrides default locations)
+    #[argh(option)]
+    pub path: Option<String>,
 }
 
 impl InstallSkillCommand {
@@ -45,17 +49,19 @@ impl InstallSkillCommand {
     /// - Directory creation fails
     /// - File write fails
     pub fn run(self) -> Result<()> {
-        let base_dir = if self.local {
+        let base_dir = if let Some(custom_path) = self.path {
+            std::path::PathBuf::from(custom_path)
+        } else if self.local {
             // Local project installation - find project root
             let project_root = find_project_root()?;
             eprintln!("Found project root: {}", project_root.display());
-            project_root.join(".claude/skills")
+            project_root.join(".agents/skills")
         } else {
             // Global installation in home directory
             let home = std::env::var("HOME")
                 .or_else(|_| std::env::var("USERPROFILE"))
                 .context("Could not determine home directory")?;
-            std::path::PathBuf::from(home).join(".claude/skills")
+            std::path::PathBuf::from(home).join(".agents/skills")
         };
 
         let mut installation_directories = Vec::new();
@@ -87,7 +93,7 @@ impl InstallSkillCommand {
 }
 
 /// Finds the project root by walking up from current directory
-/// until finding a .git or .claude directory.
+/// until finding a .git or .agents directory.
 ///
 /// # Returns
 ///
@@ -95,7 +101,7 @@ impl InstallSkillCommand {
 ///
 /// # Errors
 ///
-/// Returns an error if no .git or .claude directory is found in any parent directory
+/// Returns an error if no .git or .agents directory is found in any parent directory
 fn find_project_root() -> Result<std::path::PathBuf> {
     let mut current = std::env::current_dir().context("Failed to get current directory")?;
 
@@ -105,8 +111,8 @@ fn find_project_root() -> Result<std::path::PathBuf> {
             return Ok(current);
         }
 
-        // Check if .claude exists
-        if current.join(".claude").exists() {
+        // Check if .agents exists
+        if current.join(".agents").exists() {
             return Ok(current);
         }
 
@@ -114,7 +120,7 @@ fn find_project_root() -> Result<std::path::PathBuf> {
         match current.parent() {
             Some(parent) => current = parent.to_path_buf(),
             None => anyhow::bail!(
-                "Could not find project root. No .git or .claude directory found in any parent directory."
+                "Could not find project root. No .git or .agents directory found in any parent directory."
             ),
         }
     }
