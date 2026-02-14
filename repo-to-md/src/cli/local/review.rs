@@ -22,6 +22,10 @@ pub struct ReviewCommand {
     #[argh(option, default = "8080")]
     pub port: u16,
 
+    /// network address to bind to (default: 127.0.0.1)
+    #[argh(option, default = "String::from(\"127.0.0.1\")")]
+    pub bind: String,
+
     /// JSON file path for comment persistence (default: review-comments.json)
     #[argh(
         option,
@@ -83,7 +87,8 @@ impl ReviewCommand {
             .context("Failed to create tokio runtime")?
             .block_on(async {
                 let server =
-                    local::bind_server(refspec, self.port, self.output, diff, raw_diff).await?;
+                    local::bind_server(refspec, self.port, self.output, diff, raw_diff, &self.bind)
+                        .await?;
 
                 if should_open {
                     open_url(server.url());
