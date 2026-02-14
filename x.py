@@ -3,7 +3,7 @@
 # dependencies = ["texc"]
 #
 # [tool.uv.sources]
-# texc = { path = "../../texc", editable = true }
+# texc = { path = "../texc", editable = true }
 # ///
 from typing import Annotated
 
