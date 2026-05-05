@@ -6,7 +6,7 @@ use super::parser::LineParser;
 use super::path::{Path, PathParser};
 use super::percentage::{Percentage, PercentageParser};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub enum ExtendedHeaderLine<'a> {
     OldMode(Mode<'a>),
     NewMode(Mode<'a>),
@@ -21,10 +21,30 @@ pub enum ExtendedHeaderLine<'a> {
     Index(IndexLine<'a>),
 }
 
+impl<'a> ExtendedHeaderLine<'a> {
+    pub fn into_static(self) -> ExtendedHeaderLine<'static> {
+        match self {
+            Self::OldMode(mode) => ExtendedHeaderLine::OldMode(mode.into_static()),
+            Self::NewMode(mode) => ExtendedHeaderLine::NewMode(mode.into_static()),
+            Self::DeletedFileMode(mode) => ExtendedHeaderLine::DeletedFileMode(mode.into_static()),
+            Self::NewFileMode(mode) => ExtendedHeaderLine::NewFileMode(mode.into_static()),
+            Self::CopyFrom(path) => ExtendedHeaderLine::CopyFrom(path.into_static()),
+            Self::CopyTo(path) => ExtendedHeaderLine::CopyTo(path.into_static()),
+            Self::RenameFrom(path) => ExtendedHeaderLine::RenameFrom(path.into_static()),
+            Self::RenameTo(path) => ExtendedHeaderLine::RenameTo(path.into_static()),
+            Self::SimilarityIndex(index) => ExtendedHeaderLine::SimilarityIndex(index),
+            Self::DissimilarityIndex(index) => ExtendedHeaderLine::DissimilarityIndex(index),
+            Self::Index(index) => ExtendedHeaderLine::Index(index.into_static()),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ExtendedHeaderLineParser;
 
 impl<'a> LineParser<'a> for ExtendedHeaderLineParser {
+    const NAME: &'static str = "extended header line";
+
     type Output = ExtendedHeaderLine<'a>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {
@@ -103,19 +123,19 @@ fn parse_extended_header_line() {
 
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("old mode 100644"),
-        ExtendedHeaderLine::OldMode(Mode("100644")),
+        ExtendedHeaderLine::OldMode(Mode::borrowed("100644")),
     );
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("new mode 100755"),
-        ExtendedHeaderLine::NewMode(Mode("100755")),
+        ExtendedHeaderLine::NewMode(Mode::borrowed("100755")),
     );
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("deleted file mode 100644"),
-        ExtendedHeaderLine::DeletedFileMode(Mode("100644")),
+        ExtendedHeaderLine::DeletedFileMode(Mode::borrowed("100644")),
     );
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("new file mode 100644"),
-        ExtendedHeaderLine::NewFileMode(Mode("100644")),
+        ExtendedHeaderLine::NewFileMode(Mode::borrowed("100644")),
     );
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("copy from old path.md"),
@@ -144,22 +164,22 @@ fn parse_extended_header_line() {
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("index 7626a52..16399c7 100644"),
         ExtendedHeaderLine::Index(IndexLine {
-            old: Hash("7626a52"),
-            new: Hash("16399c7"),
-            mode: Some(Mode("100644")),
+            old: Hash::borrowed("7626a52"),
+            new: Hash::borrowed("16399c7"),
+            mode: Some(Mode::borrowed("100644")),
         }),
     );
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("index 7626a52..16399c7"),
         ExtendedHeaderLine::Index(IndexLine {
-            old: Hash("7626a52"),
-            new: Hash("16399c7"),
+            old: Hash::borrowed("7626a52"),
+            new: Hash::borrowed("16399c7"),
             mode: None,
         }),
     );
     assert_eq!(
         ExtendedHeaderLineParser.parse_line_expected("old mode \t 100644"),
-        ExtendedHeaderLine::OldMode(Mode("100644")),
+        ExtendedHeaderLine::OldMode(Mode::borrowed("100644")),
     );
     assert_eq!(
         ExtendedHeaderLineParser

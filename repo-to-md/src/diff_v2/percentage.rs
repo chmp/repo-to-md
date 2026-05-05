@@ -2,13 +2,15 @@ use anyhow::{Result, bail, ensure};
 
 use super::parser::Parser;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Percentage(pub u8);
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PercentageParser;
 
 impl<'a> Parser<'a> for PercentageParser {
+    const NAME: &'static str = "percentage";
+
     type Output = Percentage;
 
     fn parse(&self, line: &'a str) -> Result<Option<(Self::Output, &'a str)>> {

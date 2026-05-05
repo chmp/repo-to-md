@@ -7,7 +7,7 @@ use super::file_header_line::{
 };
 use super::parser::{LineParser, MultilineParser};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, serde::Serialize)]
 pub struct DiffHeaderBlock<'a> {
     pub diff: DiffHeader<'a>,
     pub extended: Vec<ExtendedHeaderLine<'a>>,
@@ -15,10 +15,31 @@ pub struct DiffHeaderBlock<'a> {
     pub new_file: NewFileHeaderLine<'a>,
 }
 
+impl<'a> DiffHeaderBlock<'a> {
+    pub fn into_static(self) -> DiffHeaderBlock<'static> {
+        DiffHeaderBlock {
+            diff: self.diff.into_static(),
+            extended: self
+                .extended
+                .into_iter()
+                .map(ExtendedHeaderLine::into_static)
+                .collect(),
+            old_files: self
+                .old_files
+                .into_iter()
+                .map(OldFileHeaderLine::into_static)
+                .collect(),
+            new_file: self.new_file.into_static(),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DiffHeaderBlockParser;
 
 impl<'a> MultilineParser<'a> for DiffHeaderBlockParser {
+    const NAME: &'static str = "diff header block";
+
     type Output = DiffHeaderBlock<'a>;
 
     fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
@@ -91,11 +112,11 @@ fn parse_diff_header_block() {
                 right: Path::borrowed("src/lib.rs"),
             },
             extended: vec![
-                ExtendedHeaderLine::OldMode(Mode("100644")),
-                ExtendedHeaderLine::NewMode(Mode("100755")),
+                ExtendedHeaderLine::OldMode(Mode::borrowed("100644")),
+                ExtendedHeaderLine::NewMode(Mode::borrowed("100755")),
                 ExtendedHeaderLine::Index(IndexLine {
-                    old: Hash("7626a52"),
-                    new: Hash("16399c7"),
+                    old: Hash::borrowed("7626a52"),
+                    new: Hash::borrowed("16399c7"),
                     mode: None,
                 }),
             ],

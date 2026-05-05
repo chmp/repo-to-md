@@ -4,7 +4,7 @@ use anyhow::{Result, bail, ensure};
 
 use super::parser::LineParser;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Path<'a>(pub Cow<'a, str>);
 
 impl<'a> Path<'a> {
@@ -15,6 +15,10 @@ impl<'a> Path<'a> {
     pub(crate) fn owned(path: impl Into<String>) -> Self {
         Self(Cow::Owned(path.into()))
     }
+
+    pub fn into_static(self) -> Path<'static> {
+        Path::owned(self.0.into_owned())
+    }
 }
 
 // NOTE: due to the lossy conversion, only a line parser makes sense. Paths
@@ -23,6 +27,8 @@ impl<'a> Path<'a> {
 pub struct PathParser;
 
 impl<'a> LineParser<'a> for PathParser {
+    const NAME: &'static str = "path";
+
     type Output = Path<'a>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {

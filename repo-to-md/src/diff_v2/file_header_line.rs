@@ -4,7 +4,7 @@ use super::diff_header::parse_quoted_diff_header_path;
 use super::parser::LineParser;
 use super::path::Path;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub enum FileHeaderLine<'a> {
     // Merge diffs can include multiple old/from file header lines before the
     // new/to file header line.
@@ -12,10 +12,21 @@ pub enum FileHeaderLine<'a> {
     New(NewFileHeaderLine<'a>),
 }
 
+impl<'a> FileHeaderLine<'a> {
+    pub fn into_static(self) -> FileHeaderLine<'static> {
+        match self {
+            Self::Old(line) => FileHeaderLine::Old(line.into_static()),
+            Self::New(line) => FileHeaderLine::New(line.into_static()),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FileHeaderLineParser;
 
 impl<'a> LineParser<'a> for FileHeaderLineParser {
+    const NAME: &'static str = "file header line";
+
     type Output = FileHeaderLine<'a>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {
@@ -29,15 +40,25 @@ impl<'a> LineParser<'a> for FileHeaderLineParser {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub struct OldFileHeaderLine<'a> {
     pub path: Option<Path<'a>>,
+}
+
+impl<'a> OldFileHeaderLine<'a> {
+    pub fn into_static(self) -> OldFileHeaderLine<'static> {
+        OldFileHeaderLine {
+            path: self.path.map(Path::into_static),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OldFileHeaderLineParser;
 
 impl<'a> LineParser<'a> for OldFileHeaderLineParser {
+    const NAME: &'static str = "old file header line";
+
     type Output = OldFileHeaderLine<'a>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {
@@ -49,15 +70,25 @@ impl<'a> LineParser<'a> for OldFileHeaderLineParser {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub struct NewFileHeaderLine<'a> {
     pub path: Option<Path<'a>>,
+}
+
+impl<'a> NewFileHeaderLine<'a> {
+    pub fn into_static(self) -> NewFileHeaderLine<'static> {
+        NewFileHeaderLine {
+            path: self.path.map(Path::into_static),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NewFileHeaderLineParser;
 
 impl<'a> LineParser<'a> for NewFileHeaderLineParser {
+    const NAME: &'static str = "new file header line";
+
     type Output = NewFileHeaderLine<'a>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {

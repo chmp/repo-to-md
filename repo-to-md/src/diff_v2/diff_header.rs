@@ -3,16 +3,27 @@ use anyhow::{Result, bail, ensure};
 use super::parser::LineParser;
 use super::path::{Path, parse_quoted_path};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub struct DiffHeader<'a> {
     pub left: Path<'a>,
     pub right: Path<'a>,
+}
+
+impl<'a> DiffHeader<'a> {
+    pub fn into_static(self) -> DiffHeader<'static> {
+        DiffHeader {
+            left: self.left.into_static(),
+            right: self.right.into_static(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DiffHeaderParser;
 
 impl<'a> LineParser<'a> for DiffHeaderParser {
+    const NAME: &'static str = "diff header";
+
     type Output = DiffHeader<'a>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {
