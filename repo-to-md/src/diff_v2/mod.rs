@@ -1,4 +1,6 @@
 //! Parse diff output from git
+//!
+//! [Format description](ttps://git-scm.com/docs/git-diff#generate_patch_text_with_p)
 
 mod chunk;
 mod chunk_header;
