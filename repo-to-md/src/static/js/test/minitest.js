@@ -57,6 +57,8 @@
 const minitest = (() => {
     "use strict";
 
+    globalThis.__minitest_results = [];
+
     // adapted from https://stackoverflow.com/a/53593328
     const stableStringify = obj => {
         const keys = {};
@@ -142,9 +144,17 @@ const minitest = (() => {
                     `%c[%s] passed: %d, errors: %d, total: %d`,
                     style, testName, summary.passed, summary.errors, summary.total,
                 );
+                globalThis.__minitest_results.push({
+                    name: testName,
+                    passed: summary.passed,
+                    errors: summary.errors,
+                    total: summary.total,
+                });
             });
         },
     });
 
     return scope(newContext(null)).run;
 })();
+
+globalThis.minitest = minitest;
