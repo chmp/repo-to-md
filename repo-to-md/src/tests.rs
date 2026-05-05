@@ -29,7 +29,8 @@ mod comment_syntax {
 mod diff_parsing {
     use insta::assert_snapshot;
 
-    use crate::diff::{SideBySideDiff, extract_code_from_diff_hunk};
+    use crate::diff::extract_code_from_diff_hunk;
+    use crate::side_by_side_diff::SideBySideDiff;
 
     #[test]
     fn test_extract_code_from_diff_hunk() {
@@ -59,11 +60,11 @@ mod diff_parsing {
  }
 "#;
 
-        let parsed = SideBySideDiff::parse(diff_text);
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
         assert_eq!(parsed.files.len(), 1);
-        assert_eq!(parsed.files[0].hunks.len(), 1);
+        assert_eq!(parsed.files[0].chunks.len(), 1);
 
-        let unified = parsed.files[0].hunks[0].to_unified();
+        let unified = parsed.files[0].chunks[0].to_unified();
         assert_snapshot!(unified);
     }
 
@@ -84,8 +85,8 @@ mod diff_parsing {
  }
 "#;
 
-        let parsed = SideBySideDiff::parse(diff_text);
-        let unified = parsed.files[0].hunks[0].to_unified();
+        let parsed = SideBySideDiff::parse(diff_text).unwrap();
+        let unified = parsed.files[0].chunks[0].to_unified();
 
         let comment = Comment {
             id: String::new(),

@@ -17,7 +17,7 @@ use super::handlers::{
 };
 use super::refspec::RefSpec;
 use super::state::AppState;
-use crate::diff::SideBySideDiff;
+use crate::side_by_side_diff::SideBySideDiff;
 
 /// Shared state for shutdown signaling
 #[derive(Clone)]
@@ -89,7 +89,7 @@ pub async fn bind_server(
     refspec: RefSpec,
     port: u16,
     comments_file: PathBuf,
-    diff: SideBySideDiff,
+    diff: SideBySideDiff<'static>,
     raw_diff: String,
     bind_address: &str,
 ) -> Result<BoundServer> {

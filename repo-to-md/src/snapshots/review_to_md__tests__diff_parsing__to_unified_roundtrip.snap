@@ -3,7 +3,7 @@ source: repo-to-md/src/tests.rs
 expression: unified
 snapshot_kind: text
 ---
-@@ -8,4 +8,6 @@ fn example() {
+@@ -8,4 +8,6 @@
  fn main() {
      println!("Hello");
 +    let x = 42;

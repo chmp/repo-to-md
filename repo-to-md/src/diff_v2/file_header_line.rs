@@ -8,15 +8,15 @@ use super::path::Path;
 pub enum FileHeaderLine<'a> {
     // Merge diffs can include multiple old/from file header lines before the
     // new/to file header line.
-    Old(OldFileHeaderLine<'a>),
-    New(NewFileHeaderLine<'a>),
+    Old(Option<Path<'a>>),
+    New(Option<Path<'a>>),
 }
 
 impl<'a> FileHeaderLine<'a> {
     pub fn into_static(self) -> FileHeaderLine<'static> {
         match self {
-            Self::Old(line) => FileHeaderLine::Old(line.into_static()),
-            Self::New(line) => FileHeaderLine::New(line.into_static()),
+            Self::Old(path) => FileHeaderLine::Old(path.map(Path::into_static)),
+            Self::New(path) => FileHeaderLine::New(path.map(Path::into_static)),
         }
     }
 }
@@ -40,46 +40,20 @@ impl<'a> LineParser<'a> for FileHeaderLineParser {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, serde::Serialize)]
-pub struct OldFileHeaderLine<'a> {
-    pub path: Option<Path<'a>>,
-}
-
-impl<'a> OldFileHeaderLine<'a> {
-    pub fn into_static(self) -> OldFileHeaderLine<'static> {
-        OldFileHeaderLine {
-            path: self.path.map(Path::into_static),
-        }
-    }
-}
-
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OldFileHeaderLineParser;
 
 impl<'a> LineParser<'a> for OldFileHeaderLineParser {
     const NAME: &'static str = "old file header line";
 
-    type Output = OldFileHeaderLine<'a>;
+    type Output = Option<Path<'a>>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {
         let Some(line) = line.strip_prefix("---") else {
             return Ok(None);
         };
         let path = parse_file_header_path(line, "a/")?;
-        Ok(Some(OldFileHeaderLine { path }))
-    }
-}
-
-#[derive(PartialEq, Debug, Clone, serde::Serialize)]
-pub struct NewFileHeaderLine<'a> {
-    pub path: Option<Path<'a>>,
-}
-
-impl<'a> NewFileHeaderLine<'a> {
-    pub fn into_static(self) -> NewFileHeaderLine<'static> {
-        NewFileHeaderLine {
-            path: self.path.map(Path::into_static),
-        }
+        Ok(Some(path))
     }
 }
 
@@ -89,14 +63,14 @@ pub struct NewFileHeaderLineParser;
 impl<'a> LineParser<'a> for NewFileHeaderLineParser {
     const NAME: &'static str = "new file header line";
 
-    type Output = NewFileHeaderLine<'a>;
+    type Output = Option<Path<'a>>;
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {
         let Some(line) = line.strip_prefix("+++") else {
             return Ok(None);
         };
         let path = parse_file_header_path(line, "b/")?;
-        Ok(Some(NewFileHeaderLine { path }))
+        Ok(Some(path))
     }
 }
 
@@ -126,41 +100,31 @@ fn parse_file_header_path<'a>(line: &'a str, prefix: &str) -> Result<Option<Path
 fn parse_file_header_line() {
     assert_eq!(
         OldFileHeaderLineParser.parse_line_expected("--- a/src/main.rs"),
-        OldFileHeaderLine {
-            path: Some(Path::borrowed("src/main.rs")),
-        },
+        Some(Path::borrowed("src/main.rs")),
     );
     assert_eq!(
         NewFileHeaderLineParser.parse_line_expected("+++ b/src/main.rs"),
-        NewFileHeaderLine {
-            path: Some(Path::borrowed("src/main.rs")),
-        },
+        Some(Path::borrowed("src/main.rs")),
     );
     assert_eq!(
         OldFileHeaderLineParser.parse_line_expected("--- /dev/null"),
-        OldFileHeaderLine { path: None },
+        None,
     );
     assert_eq!(
         NewFileHeaderLineParser.parse_line_expected("+++ /dev/null"),
-        NewFileHeaderLine { path: None },
+        None,
     );
     assert_eq!(
         OldFileHeaderLineParser.parse_line_expected(r#"--- "a/foo\tbar""#),
-        OldFileHeaderLine {
-            path: Some(Path::owned("foo\tbar")),
-        },
+        Some(Path::owned("foo\tbar")),
     );
     assert_eq!(
         NewFileHeaderLineParser.parse_line_expected(r#"+++ "b/foo\\tbar""#),
-        NewFileHeaderLine {
-            path: Some(Path::owned(r#"foo\tbar"#)),
-        },
+        Some(Path::owned(r#"foo\tbar"#)),
     );
     assert_eq!(
         FileHeaderLineParser.parse_line_expected("+++ b/src/lib.rs"),
-        FileHeaderLine::New(NewFileHeaderLine {
-            path: Some(Path::borrowed("src/lib.rs")),
-        }),
+        FileHeaderLine::New(Some(Path::borrowed("src/lib.rs"))),
     );
     let merge_file_header_lines = ["--- a/left.rs", "--- a/right.rs", "+++ b/merged.rs"]
         .into_iter()
@@ -170,15 +134,9 @@ fn parse_file_header_line() {
     assert_eq!(
         merge_file_header_lines,
         vec![
-            FileHeaderLine::Old(OldFileHeaderLine {
-                path: Some(Path::borrowed("left.rs")),
-            }),
-            FileHeaderLine::Old(OldFileHeaderLine {
-                path: Some(Path::borrowed("right.rs")),
-            }),
-            FileHeaderLine::New(NewFileHeaderLine {
-                path: Some(Path::borrowed("merged.rs")),
-            }),
+            FileHeaderLine::Old(Some(Path::borrowed("left.rs"))),
+            FileHeaderLine::Old(Some(Path::borrowed("right.rs"))),
+            FileHeaderLine::New(Some(Path::borrowed("merged.rs"))),
         ],
     );
 }

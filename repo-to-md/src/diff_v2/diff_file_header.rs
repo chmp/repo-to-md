@@ -3,17 +3,16 @@ use anyhow::bail;
 
 use super::diff_header::{DiffHeader, DiffHeaderParser};
 use super::extended_header_line::{ExtendedHeaderLine, ExtendedHeaderLineParser};
-use super::file_header_line::{
-    NewFileHeaderLine, NewFileHeaderLineParser, OldFileHeaderLine, OldFileHeaderLineParser,
-};
+use super::file_header_line::{NewFileHeaderLineParser, OldFileHeaderLineParser};
 use super::parser::MultilineParser;
+use super::path::Path;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct DiffFileHeader<'a> {
     pub header: DiffHeader<'a>,
     pub extended_header: Vec<ExtendedHeaderLine<'a>>,
-    pub old_files: Vec<OldFileHeaderLine<'a>>,
-    pub new_file: NewFileHeaderLine<'a>,
+    pub old_files: Vec<Option<Path<'a>>>,
+    pub new_file: Option<Path<'a>>,
 }
 
 impl<'a> DiffFileHeader<'a> {
@@ -28,9 +27,9 @@ impl<'a> DiffFileHeader<'a> {
             old_files: self
                 .old_files
                 .into_iter()
-                .map(OldFileHeaderLine::into_static)
+                .map(|path| path.map(Path::into_static))
                 .collect(),
-            new_file: self.new_file.into_static(),
+            new_file: self.new_file.map(Path::into_static),
         }
     }
 }
@@ -70,7 +69,6 @@ impl<'a> MultilineParser<'a> for DiffFileHeaderParser {
 fn diff_file_header_into_static() {
     use super::diff_header::DiffHeader;
     use super::extended_header_line::ExtendedHeaderLine;
-    use super::file_header_line::{NewFileHeaderLine, OldFileHeaderLine};
     use super::mode::Mode;
     use super::path::Path;
 
@@ -80,12 +78,8 @@ fn diff_file_header_into_static() {
             right: Path::borrowed("new.rs"),
         },
         extended_header: vec![ExtendedHeaderLine::OldMode(Mode::borrowed("100644"))],
-        old_files: vec![OldFileHeaderLine {
-            path: Some(Path::borrowed("old.rs")),
-        }],
-        new_file: NewFileHeaderLine {
-            path: Some(Path::borrowed("new.rs")),
-        },
+        old_files: vec![Some(Path::borrowed("old.rs"))],
+        new_file: Some(Path::borrowed("new.rs")),
     };
 
     let static_header: DiffFileHeader<'static> = header.into_static();
@@ -97,12 +91,8 @@ fn diff_file_header_into_static() {
                 right: Path::owned("new.rs"),
             },
             extended_header: vec![ExtendedHeaderLine::OldMode(Mode::owned("100644"))],
-            old_files: vec![OldFileHeaderLine {
-                path: Some(Path::owned("old.rs")),
-            }],
-            new_file: NewFileHeaderLine {
-                path: Some(Path::owned("new.rs")),
-            },
+            old_files: vec![Some(Path::owned("old.rs"))],
+            new_file: Some(Path::owned("new.rs")),
         }
     );
 }

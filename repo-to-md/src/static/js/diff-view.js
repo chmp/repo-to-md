@@ -5,7 +5,7 @@
 
 import './review-comment.js';
 import './comment-form.js';
-import { escapeHtml, escapeAttr, getRowType, groupCommentsByLine } from './utils.js';
+import { escapeHtml, escapeAttr, getRowType, groupCommentsByLine, getFilePath, getOldFilePath } from './utils.js';
 
 class DiffView extends HTMLElement {
     constructor() {
@@ -29,7 +29,7 @@ class DiffView extends HTMLElement {
      */
     setCurrentFile(file, comments) {
         this.currentFile = file;
-        this.selectedFile = file?.path || null;
+        this.selectedFile = file ? getFilePath(file) : null;
         this.currentComments = comments || [];
         this.activeCommentForm = null;
         this.render();
@@ -115,16 +115,18 @@ class DiffView extends HTMLElement {
         }
 
         const file = this.currentFile;
+        const filePath = getFilePath(file);
+        const oldFilePath = getOldFilePath(file);
         const commentsByLine = groupCommentsByLine(this.currentComments);
 
         this.innerHTML = `
-            <div class="diff-file" id="file-${escapeAttr(file.path)}">
+            <div class="diff-file" id="file-${escapeAttr(filePath)}">
                 <div class="diff-file-header">
                     <span class="diff-file-status ${file.status}"></span>
-                    <span>${escapeHtml(file.path)}</span>
-                    ${file.old_path ? `<span style="color: var(--text-secondary)"> (renamed from ${escapeHtml(file.old_path)})</span>` : ''}
+                    <span>${escapeHtml(filePath)}</span>
+                    ${oldFilePath ? `<span style="color: var(--text-secondary)"> (renamed from ${escapeHtml(oldFilePath)})</span>` : ''}
                 </div>
-                ${file.hunks.map((hunk, hunkIndex) => this.renderHunk(file, hunk, hunkIndex, commentsByLine)).join('')}
+                ${file.chunks.map((chunk, chunkIndex) => this.renderChunk(file, chunk, chunkIndex, commentsByLine)).join('')}
             </div>
             <button class="diff-next-button btn ${this.remainingUnviewed === 0 ? 'all-done' : ''}" ${this.remainingUnviewed === 0 ? 'disabled' : ''}>
                 ${this.remainingUnviewed === 0 ? 'All files reviewed' : `Next file (${this.remainingUnviewed} left)`}
@@ -134,10 +136,14 @@ class DiffView extends HTMLElement {
         this.attachEventListeners(file);
     }
 
-    renderHunk(file, hunk, hunkIndex, commentsByLine) {
+    renderChunk(file, chunk, chunkIndex, commentsByLine) {
+        const filePath = getFilePath(file);
+        const hunkHeader = formatHunkHeader(chunk);
+        let fromLine = chunk.from_range.start;
+        let toLine = chunk.to_range.start;
         let html = `
             <div class="diff-hunk">
-                <div class="diff-hunk-header">${escapeHtml(hunk.header)}</div>
+                <div class="diff-hunk-header">${escapeHtml(hunkHeader)}</div>
                 <table class="diff-table">
                     <colgroup>
                         <col class="diff-line-num-col">
@@ -148,16 +154,20 @@ class DiffView extends HTMLElement {
                     <tbody>
         `;
 
-        for (const row of hunk.rows) {
-            const rowType = getRowType(row);
+        for (const line of chunk.lines) {
+            const rowType = getRowType(line);
+            const hasOld = line.status !== 'added';
+            const hasNew = line.status !== 'removed';
+            const oldNumber = hasOld ? fromLine : null;
+            const newNumber = hasNew ? toLine : null;
             html += `<tr class="diff-row ${rowType}">`;
 
             // Old (left) side
-            if (row.old_line) {
-                const oldContent = row.old_line.highlighted_html || escapeHtml(row.old_line.content);
+            if (hasOld) {
+                const oldContent = line.from_highlighted_html || escapeHtml(line.from);
                 html += `
-                    <td class="diff-line-num">${row.old_line.number}</td>
-                    <td class="diff-line-content old ${row.old_line.line_type}"><div class="diff-line-inner" data-side="old">${oldContent}</div></td>
+                    <td class="diff-line-num">${oldNumber}</td>
+                    <td class="diff-line-content old ${rowType}"><div class="diff-line-inner" data-side="old">${oldContent}</div></td>
                 `;
             } else {
                 html += `
@@ -167,17 +177,17 @@ class DiffView extends HTMLElement {
             }
 
             // New (right) side - all lines are commentable
-            if (row.new_line) {
-                const newContent = row.new_line.highlighted_html || escapeHtml(row.new_line.content);
-                const lineComments = commentsByLine[row.new_line.number] || [];
+            if (hasNew) {
+                const newContent = line.to_highlighted_html || escapeHtml(line.to);
+                const lineComments = commentsByLine[newNumber] || [];
                 const hasComments = lineComments.length > 0;
                 const commentIndicator = hasComments ? '<span class="line-comment-indicator"></span>' : '';
                 html += `
-                    <td class="diff-line-num ${hasComments ? 'has-comment' : ''}">${row.new_line.number}${commentIndicator}</td>
-                    <td class="diff-line-content new ${row.new_line.line_type} ${hasComments ? 'has-comment' : ''} commentable"
-                        data-path="${escapeAttr(file.path)}"
-                        data-line="${row.new_line.number}"
-                        data-hunk-index="${hunkIndex}"><div class="diff-line-inner" data-side="new">${newContent}</div></td>
+                    <td class="diff-line-num ${hasComments ? 'has-comment' : ''}">${newNumber}${commentIndicator}</td>
+                    <td class="diff-line-content new ${rowType} ${hasComments ? 'has-comment' : ''} commentable"
+                        data-path="${escapeAttr(filePath)}"
+                        data-line="${newNumber}"
+                        data-chunk-index="${chunkIndex}"><div class="diff-line-inner" data-side="new">${newContent}</div></td>
                 `;
             } else {
                 html += `
@@ -189,15 +199,18 @@ class DiffView extends HTMLElement {
             html += `</tr>`;
 
             // Render comments for this line
-            if (row.new_line) {
-                const lineComments = commentsByLine[row.new_line.number] || [];
+            if (hasNew) {
+                const lineComments = commentsByLine[newNumber] || [];
                 if (lineComments.length > 0 ||
                     (this.activeCommentForm &&
-                     this.activeCommentForm.path === file.path &&
-                     this.activeCommentForm.line === row.new_line.number)) {
-                    html += this.renderCommentThread(file, row.new_line.number, lineComments, hunk);
+                     this.activeCommentForm.path === filePath &&
+                     this.activeCommentForm.line === newNumber)) {
+                    html += this.renderCommentThread(file, newNumber, lineComments, chunk);
                 }
             }
+
+            if (hasOld) fromLine += 1;
+            if (hasNew) toLine += 1;
         }
 
         html += `
@@ -230,9 +243,10 @@ class DiffView extends HTMLElement {
         return html;
     }
 
-    renderCommentThread(file, line, comments, hunk) {
+    renderCommentThread(file, line, comments, chunk) {
+        const filePath = getFilePath(file);
         const showForm = this.activeCommentForm &&
-                        this.activeCommentForm.path === file.path &&
+                        this.activeCommentForm.path === filePath &&
                         this.activeCommentForm.line === line;
 
         let html = `
@@ -246,7 +260,7 @@ class DiffView extends HTMLElement {
         }
 
         if (showForm) {
-            html += `<comment-form data-path="${escapeAttr(file.path)}" data-line="${line}"></comment-form>`;
+            html += `<comment-form data-path="${escapeAttr(filePath)}" data-line="${line}"></comment-form>`;
         }
 
         html += `
@@ -264,9 +278,9 @@ class DiffView extends HTMLElement {
             cell.addEventListener('click', () => {
                 const path = cell.dataset.path;
                 const line = parseInt(cell.dataset.line, 10);
-                const hunkIndex = parseInt(cell.dataset.hunkIndex, 10);
-                const hunk = file.hunks[hunkIndex];
-                const diffHunk = hunk ? hunk.header : '';
+                const chunkIndex = parseInt(cell.dataset.chunkIndex, 10);
+                const chunk = file.chunks[chunkIndex];
+                const diffHunk = chunk ? chunkToUnified(chunk) : '';
 
                 this.showCommentForm(path, line, diffHunk);
             });
@@ -345,6 +359,24 @@ class DiffView extends HTMLElement {
             this.hideCommentForm();
         });
     }
+}
+
+function formatHunkHeader(chunk) {
+    return `@@ -${chunk.from_range.start},${chunk.from_range.end - chunk.from_range.start} +${chunk.to_range.start},${chunk.to_range.end - chunk.to_range.start} @@`;
+}
+
+function chunkToUnified(chunk) {
+    const lines = [formatHunkHeader(chunk)];
+    for (const line of chunk.lines) {
+        if (line.status === 'added') {
+            lines.push(`+${line.to}`);
+        } else if (line.status === 'removed') {
+            lines.push(`-${line.from}`);
+        } else {
+            lines.push(` ${line.to}`);
+        }
+    }
+    return lines.join('\n');
 }
 
 customElements.define('diff-view', DiffView);

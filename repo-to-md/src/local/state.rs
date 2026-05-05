@@ -10,7 +10,7 @@ use tempfile::NamedTempFile;
 
 use super::refspec::RefSpec;
 use crate::client::Comment;
-use crate::diff::SideBySideDiff;
+use crate::side_by_side_diff::SideBySideDiff;
 
 /// JSON file schema for persisted review session (diff + comments)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +49,7 @@ pub struct AppState {
     pub comments: RwLock<Vec<Comment>>,
     pub viewed_files: RwLock<Vec<String>>,
     /// Pre-loaded and highlighted diff
-    pub diff: SideBySideDiff,
+    pub diff: SideBySideDiff<'static>,
     /// Raw diff text for persistence
     raw_diff: String,
     file_mtime: RwLock<Option<SystemTime>>,
@@ -59,7 +59,7 @@ impl AppState {
     pub fn new(
         refspec: RefSpec,
         comments_file_path: PathBuf,
-        diff: SideBySideDiff,
+        diff: SideBySideDiff<'static>,
         raw_diff: String,
     ) -> Result<Arc<Self>> {
         let (comments, viewed_files, mtime) = Self::load_comments(&comments_file_path)?;

@@ -19,6 +19,10 @@ impl<'a> Path<'a> {
     pub fn into_static(self) -> Path<'static> {
         Path::owned(self.0.into_owned())
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 // NOTE: due to the lossy conversion, only a line parser makes sense. Paths

@@ -1,11 +1,13 @@
 use std::borrow::Cow;
 
+use crate::diff_v2::utils::AtLeastOne;
+use crate::side_by_side_diff::{LineStatus, SideBySideLine};
+
 use super::LineParser;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct DiffLine<'a> {
-    from_status: Vec<DiffLineStatus>,
-    to_status: DiffLineStatus,
+    from_status: AtLeastOne<DiffLineStatus>,
     content: Cow<'a, str>,
 }
 
@@ -13,7 +15,6 @@ impl<'a> DiffLine<'a> {
     pub fn into_static(self) -> DiffLine<'static> {
         DiffLine {
             from_status: self.from_status,
-            to_status: self.to_status,
             content: Cow::Owned(self.content.into_owned()),
         }
     }
@@ -24,6 +25,28 @@ pub enum DiffLineStatus {
     Added,
     Removed,
     Unchanged,
+}
+
+impl<'a> From<DiffLine<'a>> for SideBySideLine<'a> {
+    fn from(value: DiffLine<'a>) -> Self {
+        match value.from_status.head() {
+            DiffLineStatus::Added => SideBySideLine {
+                status: LineStatus::Added,
+                from: Cow::Borrowed(""),
+                to: value.content,
+            },
+            DiffLineStatus::Removed => SideBySideLine {
+                status: LineStatus::Removed,
+                from: value.content,
+                to: Cow::Borrowed(""),
+            },
+            DiffLineStatus::Unchanged => SideBySideLine {
+                status: LineStatus::Context,
+                from: value.content.clone(),
+                to: value.content,
+            },
+        }
+    }
 }
 
 pub struct DiffLineParser {
@@ -57,25 +80,14 @@ impl<'a> LineParser<'a> for DiffLineParser {
 
             from_status.push(status);
         }
-
-        if from_status.len() != self.number_of_parents {
-            return Ok(None);
+        while from_status.len() < self.number_of_parents {
+            from_status.push(DiffLineStatus::Unchanged);
         }
-        let to_status = if from_status.contains(&DiffLineStatus::Added) {
-            DiffLineStatus::Added
-        } else if from_status
-            .iter()
-            .all(|status| *status == DiffLineStatus::Removed)
-        {
-            DiffLineStatus::Removed
-        } else {
-            DiffLineStatus::Unchanged
-        };
+
         let content = Cow::Borrowed(line.get(self.number_of_parents..).unwrap_or(""));
 
         Ok(Some(DiffLine {
-            from_status,
-            to_status,
+            from_status: from_status.try_into()?,
             content,
         }))
     }
@@ -89,24 +101,21 @@ fn parse_single_parent_diff_lines_from_git_diff() {
     assert_eq!(
         parser.parse_line_expected(" tmp*"),
         DiffLine {
-            from_status: vec![DiffLineStatus::Unchanged],
-            to_status: DiffLineStatus::Unchanged,
+            from_status: vec![DiffLineStatus::Unchanged].try_into().unwrap(),
             content: Cow::Borrowed("tmp*"),
         },
     );
     assert_eq!(
         parser.parse_line_expected("-/.claude/"),
         DiffLine {
-            from_status: vec![DiffLineStatus::Removed],
-            to_status: DiffLineStatus::Removed,
+            from_status: vec![DiffLineStatus::Removed].try_into().unwrap(),
             content: Cow::Borrowed("/.claude/"),
         },
     );
     assert_eq!(
         parser.parse_line_expected("+/.agents/"),
         DiffLine {
-            from_status: vec![DiffLineStatus::Added],
-            to_status: DiffLineStatus::Added,
+            from_status: vec![DiffLineStatus::Added].try_into().unwrap(),
             content: Cow::Borrowed("/.agents/"),
         },
     );
@@ -115,8 +124,7 @@ fn parse_single_parent_diff_lines_from_git_diff() {
             "+    applicable.sort_by_key(|(line_number, _)| std::cmp::Reverse(*line_number));"
         ),
         DiffLine {
-            from_status: vec![DiffLineStatus::Added],
-            to_status: DiffLineStatus::Added,
+            from_status: vec![DiffLineStatus::Added].try_into().unwrap(),
             content: Cow::Borrowed(
                 "    applicable.sort_by_key(|(line_number, _)| std::cmp::Reverse(*line_number));"
             ),
@@ -132,24 +140,27 @@ fn parse_multi_parent_diff_lines() {
     assert_eq!(
         parser.parse_line_expected("  unchanged"),
         DiffLine {
-            from_status: vec![DiffLineStatus::Unchanged, DiffLineStatus::Unchanged],
-            to_status: DiffLineStatus::Unchanged,
+            from_status: vec![DiffLineStatus::Unchanged, DiffLineStatus::Unchanged]
+                .try_into()
+                .unwrap(),
             content: Cow::Borrowed("unchanged"),
         },
     );
     assert_eq!(
         parser.parse_line_expected("- removed from first parent"),
         DiffLine {
-            from_status: vec![DiffLineStatus::Removed, DiffLineStatus::Unchanged],
-            to_status: DiffLineStatus::Unchanged,
+            from_status: vec![DiffLineStatus::Removed, DiffLineStatus::Unchanged]
+                .try_into()
+                .unwrap(),
             content: Cow::Borrowed("removed from first parent"),
         },
     );
     assert_eq!(
         parser.parse_line_expected("++ added against both parents"),
         DiffLine {
-            from_status: vec![DiffLineStatus::Added, DiffLineStatus::Added],
-            to_status: DiffLineStatus::Added,
+            from_status: vec![DiffLineStatus::Added, DiffLineStatus::Added]
+                .try_into()
+                .unwrap(),
             content: Cow::Borrowed(" added against both parents"),
         },
     );

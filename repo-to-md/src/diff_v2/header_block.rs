@@ -2,17 +2,16 @@ use anyhow::{Result, bail, ensure};
 
 use super::diff_header::{DiffHeader, DiffHeaderParser};
 use super::extended_header_line::{ExtendedHeaderLine, ExtendedHeaderLineParser};
-use super::file_header_line::{
-    NewFileHeaderLine, NewFileHeaderLineParser, OldFileHeaderLine, OldFileHeaderLineParser,
-};
+use super::file_header_line::{NewFileHeaderLineParser, OldFileHeaderLineParser};
 use super::parser::{LineParser, MultilineParser};
+use super::path::Path;
 
 #[derive(PartialEq, Debug, serde::Serialize)]
 pub struct DiffHeaderBlock<'a> {
     pub diff: DiffHeader<'a>,
     pub extended: Vec<ExtendedHeaderLine<'a>>,
-    pub old_files: Vec<OldFileHeaderLine<'a>>,
-    pub new_file: NewFileHeaderLine<'a>,
+    pub old_files: Vec<Option<Path<'a>>>,
+    pub new_file: Option<Path<'a>>,
 }
 
 impl<'a> DiffHeaderBlock<'a> {
@@ -27,9 +26,9 @@ impl<'a> DiffHeaderBlock<'a> {
             old_files: self
                 .old_files
                 .into_iter()
-                .map(OldFileHeaderLine::into_static)
+                .map(|path| path.map(Path::into_static))
                 .collect(),
-            new_file: self.new_file.into_static(),
+            new_file: self.new_file.map(Path::into_static),
         }
     }
 }
@@ -120,12 +119,8 @@ fn parse_diff_header_block() {
                     mode: None,
                 }),
             ],
-            old_files: vec![OldFileHeaderLine {
-                path: Some(Path::borrowed("src/lib.rs")),
-            }],
-            new_file: NewFileHeaderLine {
-                path: Some(Path::borrowed("src/lib.rs")),
-            },
+            old_files: vec![Some(Path::borrowed("src/lib.rs"))],
+            new_file: Some(Path::borrowed("src/lib.rs")),
         },
     );
     assert_eq!(rest, &["@@ -1,3 +1,3 @@"]);
@@ -141,18 +136,9 @@ fn parse_diff_header_block() {
     assert_eq!(
         header.old_files,
         vec![
-            OldFileHeaderLine {
-                path: Some(Path::borrowed("left.rs")),
-            },
-            OldFileHeaderLine {
-                path: Some(Path::borrowed("right.rs")),
-            },
+            Some(Path::borrowed("left.rs")),
+            Some(Path::borrowed("right.rs")),
         ],
     );
-    assert_eq!(
-        header.new_file,
-        NewFileHeaderLine {
-            path: Some(Path::borrowed("merged.rs")),
-        },
-    );
+    assert_eq!(header.new_file, Some(Path::borrowed("merged.rs")),);
 }

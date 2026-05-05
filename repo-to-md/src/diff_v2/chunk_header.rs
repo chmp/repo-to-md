@@ -2,11 +2,13 @@ use std::ops::Range;
 
 use anyhow::{anyhow, bail};
 
+use crate::diff_v2::utils::AtLeastOne;
+
 use super::LineParser;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct ChunkHeader {
-    pub from_ranges: Vec<Range<usize>>,
+    pub from_ranges: AtLeastOne<Range<usize>>,
     pub to_range: Range<usize>,
 }
 
@@ -72,7 +74,7 @@ impl<'a> LineParser<'a> for ChunkHeaderParser {
         let _section = rest.trim_start();
 
         Ok(Some(ChunkHeader {
-            from_ranges,
+            from_ranges: from_ranges.try_into()?,
             to_range: to_range.ok_or_else(|| anyhow!("missing to range"))?,
         }))
     }
@@ -94,7 +96,7 @@ fn test_parse_chunk_header() {
     assert_eq!(
         ChunkHeaderParser.parse_line_expected("@@ -0,0 +1,29 @@  "),
         ChunkHeader {
-            from_ranges: std::iter::once(0..0).collect(),
+            from_ranges: AtLeastOne::from(0..0),
             to_range: 1..30,
         },
     );
@@ -102,22 +104,27 @@ fn test_parse_chunk_header() {
         ChunkHeaderParser
             .parse_line_expected("@@ -161,7 +161,7 @@ fn filter_applicable_comments<'a>("),
         ChunkHeader {
-            from_ranges: std::iter::once(161..168).collect(),
+            from_ranges: AtLeastOne::from(161..168),
             to_range: 161..168,
         },
     );
     assert_eq!(
         ChunkHeaderParser.parse_line_expected("@@ -1,13 +1,14 @@"),
         ChunkHeader {
-            from_ranges: std::iter::once(1..14).collect(),
+            from_ranges: AtLeastOne::from(1..14),
             to_range: 1..15,
         },
     );
     assert_eq!(
         ChunkHeaderParser.parse_line_expected("@@@ -1,2 -1,2 +1,2 @@@"),
         ChunkHeader {
-            from_ranges: vec![1..3, 1..3],
+            from_ranges: range_list([1..3, 1..3]),
             to_range: 1..3,
         },
     );
+}
+
+#[cfg(test)]
+fn range_list<const N: usize>(ranges: [Range<usize>; N]) -> AtLeastOne<Range<usize>> {
+    ranges.into_iter().collect::<Vec<_>>().try_into().unwrap()
 }

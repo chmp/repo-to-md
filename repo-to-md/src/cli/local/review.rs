@@ -5,10 +5,10 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 use argh::FromArgs;
 
-use crate::diff::SideBySideDiff;
 use crate::executable::check_executable;
 use crate::local::{self, CommentsFile, RefSpec, detect_base_branch};
 use crate::repository::{CheckWorkingDirectory, LocalRepository};
+use crate::side_by_side_diff::SideBySideDiff;
 
 /// Launch a web UI for reviewing local git diffs
 #[derive(FromArgs)]
@@ -70,7 +70,7 @@ impl ReviewCommand {
         let refspec = RefSpec::parse(&base, &end)?.resolve()?;
         let raw_diff = validate_and_prepare_session(&self.output, &refspec, self.force)?;
 
-        let diff = SideBySideDiff::parse(&raw_diff).highlight();
+        let diff = SideBySideDiff::parse(&raw_diff)?;
 
         eprintln!("Starting web UI for diff review...");
         eprintln!(

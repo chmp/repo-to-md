@@ -16,6 +16,7 @@ mod mode;
 mod parser;
 mod path;
 mod percentage;
+mod utils;
 
 pub use chunk::{Chunk, ChunkParser};
 pub use chunk_header::{ChunkHeader, ChunkHeaderParser};
@@ -26,8 +27,7 @@ pub use diff_header::{DiffHeader, DiffHeaderParser};
 pub use diff_line::{DiffLine, DiffLineParser, DiffLineStatus};
 pub use extended_header_line::{ExtendedHeaderLine, ExtendedHeaderLineParser};
 pub use file_header_line::{
-    FileHeaderLine, FileHeaderLineParser, NewFileHeaderLine, NewFileHeaderLineParser,
-    OldFileHeaderLine, OldFileHeaderLineParser,
+    FileHeaderLine, FileHeaderLineParser, NewFileHeaderLineParser, OldFileHeaderLineParser,
 };
 pub use hash::{Hash, HashParser};
 pub use header_block::{DiffHeaderBlock, DiffHeaderBlockParser};

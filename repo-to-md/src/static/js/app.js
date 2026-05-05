@@ -6,7 +6,7 @@
 import * as api from './api.js';
 import './file-tree.js';
 import './diff-view.js';
-import { getCommentsByFile, computeFileTreeItems, getCommentPositions } from './utils.js';
+import { getCommentsByFile, computeFileTreeItems, getCommentPositions, getFilePath } from './utils.js';
 
 export class App {
     constructor() {
@@ -35,7 +35,7 @@ export class App {
             this.diff = session;
             this.comments = session.comments;
             this.viewedFiles = session.viewed_files;
-            this.filesMap = new Map(session.files.map(f => [f.path, f]));
+            this.filesMap = new Map(session.files.map(f => [getFilePath(f), f]));
 
             // Update ref info
             const refText = session.end_ref
@@ -52,8 +52,9 @@ export class App {
 
             // Select first file if available
             if (session.files.length > 0) {
-                this.selectFileForDiffView(session.files[0].path);
-                this.fileTree.selectFile(session.files[0].path);
+                const firstPath = getFilePath(session.files[0]);
+                this.selectFileForDiffView(firstPath);
+                this.fileTree.selectFile(firstPath);
             }
         } catch (error) {
             console.error('Failed to load data:', error);
@@ -177,7 +178,7 @@ export class App {
     navigateFile(direction) {
         if (!this.diff?.files?.length) return;
 
-        const navList = ['__general__', ...this.diff.files.map(f => f.path)];
+        const navList = ['__general__', ...this.diff.files.map(getFilePath)];
         const currentIndex = navList.indexOf(this.fileTree.selectedFile);
         const baseIndex = currentIndex === -1 ? (direction > 0 ? -1 : 0) : currentIndex;
         const newIndex = (baseIndex + direction + navList.length) % navList.length;

@@ -1,19 +1,25 @@
+use std::ops::Range;
+
 use anyhow::Result;
 
-use super::chunk_header::{ChunkHeader, ChunkHeaderParser};
+use crate::diff_v2::utils::AtLeastOne;
+
+use super::chunk_header::ChunkHeaderParser;
 use super::diff_line::{DiffLine, DiffLineParser};
 use super::parser::MultilineParser;
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Chunk<'a> {
-    pub header: ChunkHeader,
+    pub from_ranges: AtLeastOne<Range<usize>>,
+    pub to_range: Range<usize>,
     pub lines: Vec<DiffLine<'a>>,
 }
 
 impl<'a> Chunk<'a> {
     pub fn into_static(self) -> Chunk<'static> {
         Chunk {
-            header: self.header,
+            from_ranges: self.from_ranges,
+            to_range: self.to_range,
             lines: self.lines.into_iter().map(DiffLine::into_static).collect(),
         }
     }
@@ -32,17 +38,12 @@ impl<'a> MultilineParser<'a> for ChunkParser {
         };
         let (lines, rest) = DiffLineParser::new(header.from_ranges.len()).parse_lines_many(rest)?;
 
-        let result = Chunk { header, lines };
+        let result = Chunk {
+            from_ranges: header.from_ranges,
+            to_range: header.to_range,
+            lines,
+        };
 
         Ok(Some((result, rest)))
     }
-}
-
-#[test]
-fn chunk_into_static() {
-    let lines = ["@@ -1,1 +1,1 @@", " line", "not a diff line"];
-    let (chunk, rest) = ChunkParser.parse_lines_required(&lines).unwrap();
-    assert_eq!(rest, &["not a diff line"]);
-
-    let _static_chunk: Chunk<'static> = chunk.into_static();
 }
