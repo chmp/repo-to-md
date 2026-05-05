@@ -5,13 +5,122 @@ use std::ops::Range;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::diff_v2::{self, Chunk, Diff, DiffFile, ExtendedHeaderLine, Path};
+use crate::diff_v2::{
+    self, Chunk, ChunkParser, Diff, DiffFile, ExtendedHeaderLine, MultilineParser, Path,
+};
 
 const DEV_NULL: &str = "/dev/null";
+const CONTEXT_LINES: u32 = 5;
+const MIN_TRUNCATION_THRESHOLD: usize = 20;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SideBySideDiff<'a> {
     pub files: Vec<SideBySideFile<'a>>,
+}
+
+/// A line from a parsed unified diff hunk.
+pub(crate) struct ParsedHunkLine {
+    pub content: String,
+    pub new_line_number: Option<u32>,
+}
+
+/// Parse a unified diff hunk and extract display lines with new-side line numbers.
+pub(crate) fn parse_diff_hunk_with_line_numbers(
+    diff_hunk: &str,
+    line_range: Option<(u32, u32)>,
+) -> (Vec<ParsedHunkLine>, bool, bool) {
+    let lines = diff_hunk.lines().collect::<Vec<_>>();
+    let Ok((chunk, _)) = ChunkParser.parse_lines_required(&lines) else {
+        return (Vec::new(), false, false);
+    };
+    let chunk = SideBySideChunk::from(chunk);
+
+    let mut diff_lines = Vec::new();
+    let mut truncated_start = false;
+    let mut truncated_end = false;
+    let mut current_new_line = u32::try_from(chunk.to_range.start).ok();
+
+    for line in chunk.lines {
+        match check_line_in_range(current_new_line, line_range, truncated_start) {
+            RangeCheckResult::BeforeRange => {
+                truncated_start = true;
+            }
+            RangeCheckResult::AfterRange => {
+                truncated_end = true;
+                break;
+            }
+            RangeCheckResult::Include => {
+                let new_line_number = (line.status != LineStatus::Removed)
+                    .then_some(current_new_line)
+                    .flatten();
+                diff_lines.push(ParsedHunkLine {
+                    content: match line.status {
+                        LineStatus::Removed => line.from.into_owned(),
+                        LineStatus::Context | LineStatus::Added => line.to.into_owned(),
+                    },
+                    new_line_number,
+                });
+            }
+        }
+
+        if line.status != LineStatus::Removed
+            && let Some(line_number) = &mut current_new_line
+        {
+            *line_number += 1;
+        }
+    }
+
+    (diff_lines, truncated_start, truncated_end)
+}
+
+/// Calculate the line range to display based on commented lines.
+pub(crate) fn calculate_context_range(
+    commented_lines: &[u32],
+    total_lines: usize,
+) -> Option<(u32, u32)> {
+    if commented_lines.is_empty() || total_lines <= MIN_TRUNCATION_THRESHOLD {
+        return None;
+    }
+
+    let Some(min_line) = commented_lines.iter().min().copied() else {
+        unreachable!("commented_lines is non-empty");
+    };
+    let Some(max_line) = commented_lines.iter().max().copied() else {
+        unreachable!("commented_lines is non-empty");
+    };
+
+    let start = min_line.saturating_sub(CONTEXT_LINES);
+    let end = max_line.saturating_add(CONTEXT_LINES);
+
+    if (end - start) as usize > total_lines * 80 / 100 {
+        return None;
+    }
+
+    Some((start, end))
+}
+
+enum RangeCheckResult {
+    BeforeRange,
+    Include,
+    AfterRange,
+}
+
+fn check_line_in_range(
+    line_number: Option<u32>,
+    line_range: Option<(u32, u32)>,
+    already_truncated_start: bool,
+) -> RangeCheckResult {
+    let Some((start, end)) = line_range else {
+        return RangeCheckResult::Include;
+    };
+
+    match line_number {
+        Some(num) if num < start => RangeCheckResult::BeforeRange,
+        Some(num) if num > end => RangeCheckResult::AfterRange,
+        Some(_) => RangeCheckResult::Include,
+        None if already_truncated_start => RangeCheckResult::Include,
+        None => RangeCheckResult::Include,
+    }
 }
 
 impl SideBySideDiff<'static> {

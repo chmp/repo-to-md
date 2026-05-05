@@ -9,8 +9,8 @@ use std::time::SystemTime;
 use anyhow::{Context, Result, bail};
 
 use crate::client::Comment;
-use crate::diff::parse_diff_hunk_with_line_numbers;
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
+use crate::side_by_side_diff::parse_diff_hunk_with_line_numbers;
 
 /// Result of applying comments to source files.
 #[derive(Debug, Default)]

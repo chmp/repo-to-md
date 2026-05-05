@@ -1,18 +1,6 @@
 /// Diff parsing utilities for handling unified diff format.
 use serde::{Deserialize, Serialize};
 
-/// Number of context lines to show before/after commented lines in large diffs
-const CONTEXT_LINES: u32 = 5;
-
-/// Minimum number of lines in a diff hunk before truncation is considered
-const MIN_TRUNCATION_THRESHOLD: usize = 20;
-
-/// A line from a diff hunk with its content and line number.
-pub(crate) struct DiffLine {
-    pub content: String,
-    pub new_line_number: Option<u32>,
-}
-
 /// Type of change for a diff line
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -164,24 +152,6 @@ enum DiffLineKind {
     Skip,
 }
 
-/// Result of checking whether a line should be included in the output.
-enum RangeCheckResult {
-    /// Line is within range, include it
-    Include,
-    /// Line is before the range start
-    BeforeRange,
-    /// Line is after the range end
-    AfterRange,
-}
-
-/// Parse the starting line number from a diff hunk's @@ header.
-///
-/// Extracts the "new file" starting line number from headers like:
-/// `@@ -1,5 +10,7 @@` -> returns `Some(10)`
-fn parse_starting_line_number(header: &str) -> Option<u32> {
-    parse_hunk_header(header).map(|info| info.new_start)
-}
-
 /// Classify a diff line to determine how it should be processed.
 fn classify_diff_line(line: &str) -> DiffLineKind {
     if line.starts_with("+++") || line.starts_with("---") || line.starts_with('\\') {
@@ -192,31 +162,6 @@ fn classify_diff_line(line: &str) -> DiffLineKind {
         DiffLineKind::Deleted
     } else {
         DiffLineKind::Context
-    }
-}
-
-/// Check if a line should be included based on the optional range filter.
-fn check_line_in_range(
-    current_line: Option<u32>,
-    line_range: Option<(u32, u32)>,
-    truncated_start: bool,
-) -> RangeCheckResult {
-    let Some((range_start, range_end)) = line_range else {
-        return RangeCheckResult::Include;
-    };
-
-    match current_line {
-        Some(line_num) if line_num < range_start => RangeCheckResult::BeforeRange,
-        Some(line_num) if line_num > range_end => RangeCheckResult::AfterRange,
-        Some(_) => RangeCheckResult::Include,
-        // Deleted lines have no line number - include if we haven't started truncating
-        None => {
-            if truncated_start {
-                RangeCheckResult::BeforeRange
-            } else {
-                RangeCheckResult::Include
-            }
-        }
     }
 }
 
@@ -242,150 +187,6 @@ fn extract_line_content(line: &str, kind: &DiffLineKind) -> String {
         }
         DiffLineKind::Skip => String::new(),
     }
-}
-
-/// Parses a unified diff hunk and extracts lines with their line numbers.
-///
-/// Processes a diff hunk in unified format (with @@ headers) and tracks line numbers
-/// for added and context lines. Optionally filters lines based on a line range.
-///
-/// # Arguments
-///
-/// * `diff_hunk` - A unified diff hunk string (starting with "@@")
-/// * `line_range` - Optional (start, end) range to filter lines. Lines outside this
-///   range are excluded, and truncation flags are set accordingly.
-///
-/// # Returns
-///
-/// A tuple of:
-/// - Vec of [`DiffLine`] structs with content and line numbers
-/// - bool indicating if content was truncated at the start
-/// - bool indicating if content was truncated at the end
-pub(crate) fn parse_diff_hunk_with_line_numbers(
-    diff_hunk: &str,
-    line_range: Option<(u32, u32)>,
-) -> (Vec<DiffLine>, bool, bool) {
-    let mut diff_lines = Vec::new();
-    let mut lines = diff_hunk.lines();
-    let mut truncated_start = false;
-    let mut truncated_end = false;
-
-    // Parse the @@ header to get the starting line number
-    let mut current_new_line = lines.next().and_then(parse_starting_line_number);
-
-    for line in lines {
-        let kind = classify_diff_line(line);
-
-        if matches!(kind, DiffLineKind::Skip) {
-            continue;
-        }
-
-        // Check range filtering
-        match check_line_in_range(current_new_line, line_range, truncated_start) {
-            RangeCheckResult::BeforeRange => {
-                truncated_start = true;
-            }
-            RangeCheckResult::AfterRange => {
-                truncated_end = true;
-                break;
-            }
-            RangeCheckResult::Include => {
-                let content = extract_line_content(line, &kind);
-                let line_number = match kind {
-                    DiffLineKind::Deleted => None,
-                    _ => current_new_line,
-                };
-                diff_lines.push(DiffLine {
-                    content,
-                    new_line_number: line_number,
-                });
-            }
-        }
-
-        // Increment line number for added and context lines (not deleted)
-        if !matches!(kind, DiffLineKind::Deleted)
-            && let Some(ref mut line_num) = current_new_line
-        {
-            *line_num += 1;
-        }
-    }
-
-    (diff_lines, truncated_start, truncated_end)
-}
-
-/// Calculate the line range to display based on commented lines.
-///
-/// For large diffs, determines if truncation is beneficial and calculates
-/// the range of lines to show (CONTEXT_LINES before/after commented lines).
-///
-/// # Arguments
-///
-/// * `commented_lines` - Line numbers that have comments
-/// * `total_lines` - Total number of lines in the diff hunk
-///
-/// # Returns
-///
-/// `Some((start, end))` if truncation should be applied, `None` to show full hunk
-pub(crate) fn calculate_context_range(
-    commented_lines: &[u32],
-    total_lines: usize,
-) -> Option<(u32, u32)> {
-    if commented_lines.is_empty() || total_lines <= MIN_TRUNCATION_THRESHOLD {
-        return None; // Show full hunk
-    }
-
-    let Some(min_line) = commented_lines.iter().min().copied() else {
-        unreachable!("commented_lines is non-empty");
-    };
-    let Some(max_line) = commented_lines.iter().max().copied() else {
-        unreachable!("commented_lines is non-empty");
-    };
-
-    let start = min_line.saturating_sub(CONTEXT_LINES);
-    let end = max_line.saturating_add(CONTEXT_LINES);
-
-    // If the range covers most of the hunk anyway, don't truncate
-    if (end - start) as usize > total_lines * 80 / 100 {
-        return None;
-    }
-
-    Some((start, end))
-}
-
-/// Extracts code lines from a unified diff hunk.
-///
-/// Processes a diff hunk to extract only the code lines, excluding diff metadata
-/// and deleted lines. Added lines (starting with '+') have the '+' prefix removed.
-/// Context lines are included as-is.
-///
-/// This function is primarily used for testing.
-///
-/// # Arguments
-///
-/// * `diff_hunk` - A unified diff hunk string (starting with "@@")
-///
-/// # Returns
-///
-/// A vector of code line strings with diff markers removed.
-#[cfg(test)]
-pub(crate) fn extract_code_from_diff_hunk(diff_hunk: &str) -> Vec<String> {
-    let mut code_lines = Vec::new();
-
-    for line in diff_hunk.lines() {
-        if line.starts_with("@@") {
-            continue;
-        }
-
-        if line.starts_with('+') && !line.starts_with("+++") {
-            code_lines.push(line[1..].to_string());
-        } else if line.starts_with('-') && !line.starts_with("---") {
-            continue;
-        } else if !line.starts_with('\\') {
-            code_lines.push(line.to_string());
-        }
-    }
-
-    code_lines
 }
 
 /// Parser state for processing git diff output line by line.

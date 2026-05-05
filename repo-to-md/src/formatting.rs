@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::io::Write;
 
 use crate::client::{Comment, Issue};
-use crate::diff::{calculate_context_range, parse_diff_hunk_with_line_numbers};
 use crate::language::{detect_language, get_comment_prefix, get_comment_suffix};
+use crate::side_by_side_diff::{calculate_context_range, parse_diff_hunk_with_line_numbers};
 
 /// Groups comments by their file path.
 ///

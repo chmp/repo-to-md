@@ -29,8 +29,8 @@ mod comment_syntax {
 mod diff_parsing {
     use insta::assert_snapshot;
 
-    use crate::diff::extract_code_from_diff_hunk;
     use crate::side_by_side_diff::SideBySideDiff;
+    use crate::side_by_side_diff::parse_diff_hunk_with_line_numbers;
 
     #[test]
     fn test_extract_code_from_diff_hunk() {
@@ -41,8 +41,12 @@ mod diff_parsing {
 +    /// HTML sanitization configuration
 +    pub sanitizer: SanitizerConfig,"#;
 
-        let result = extract_code_from_diff_hunk(diff_hunk);
-        let result = result.join("\n");
+        let (result, _, _) = parse_diff_hunk_with_line_numbers(diff_hunk, None);
+        let result = result
+            .into_iter()
+            .map(|line| line.content)
+            .collect::<Vec<_>>()
+            .join("\n");
 
         assert_snapshot!(result);
     }

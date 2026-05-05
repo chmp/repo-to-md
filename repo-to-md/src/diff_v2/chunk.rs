@@ -33,10 +33,23 @@ impl<'a> MultilineParser<'a> for ChunkParser {
     type Output = Chunk<'a>;
 
     fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        let Some((header, rest)) = ChunkHeaderParser.parse_lines(lines)? else {
+        let Some((header, mut rest)) = ChunkHeaderParser.parse_lines(lines)? else {
             return Ok(None);
         };
-        let (lines, rest) = DiffLineParser::new(header.from_ranges.len()).parse_lines_many(rest)?;
+        let parser = DiffLineParser::new(header.from_ranges.len());
+        let mut lines = Vec::new();
+        while let Some((head, tail)) = rest.split_first() {
+            if head.starts_with('\\') {
+                rest = tail;
+                continue;
+            }
+
+            let Some((line, next_rest)) = parser.parse_lines(rest)? else {
+                break;
+            };
+            lines.push(line);
+            rest = next_rest;
+        }
 
         let result = Chunk {
             from_ranges: header.from_ranges,
