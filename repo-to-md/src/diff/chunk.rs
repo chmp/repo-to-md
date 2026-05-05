@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use anyhow::Result;
 
-use crate::diff_v2::utils::AtLeastOne;
+use crate::diff::utils::AtLeastOne;
 
 use super::chunk_header::ChunkHeaderParser;
 use super::diff_line::{DiffLine, DiffLineParser};

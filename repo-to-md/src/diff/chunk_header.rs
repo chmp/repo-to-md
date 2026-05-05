@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use anyhow::{anyhow, bail};
 
-use crate::diff_v2::utils::AtLeastOne;
+use crate::diff::utils::AtLeastOne;
 
 use super::LineParser;
 

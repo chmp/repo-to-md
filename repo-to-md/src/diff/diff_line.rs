@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::diff_v2::utils::AtLeastOne;
+use crate::diff::utils::AtLeastOne;
 use crate::side_by_side_diff::{LineStatus, SideBySideLine};
 
 use super::LineParser;

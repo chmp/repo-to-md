@@ -5,7 +5,7 @@ use std::ops::Range;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::diff_v2::{
+use crate::diff::{
     self, Chunk, ChunkParser, Diff, DiffFile, ExtendedHeaderLine, MultilineParser, Path,
 };
 
@@ -126,7 +126,7 @@ fn check_line_in_range(
 impl SideBySideDiff<'static> {
     pub fn parse(raw_diff: &str) -> Result<Self> {
         let lines = raw_diff.lines().collect::<Vec<_>>();
-        Ok(diff_v2::parse(&lines)?.into_static().into())
+        Ok(diff::parse(&lines)?.into_static().into())
     }
 }
 
