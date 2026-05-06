@@ -1,7 +1,8 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with
-code in this repository.
+This file provides guidance for AI agents when working with code in this
+repository. The tool follows the [AgentSkills specification](https://agentskills.io/)
+for skill compatibility.
 
 ## Project Overview
 
@@ -179,32 +180,34 @@ cargo run -- local format -o out.md                 # Format to file
 
 ### Install skill
 
-**Note to Claude Code users**: The information below documents the skill
-installation functionality. This is for user reference only - skill installation
-should always be performed by the user, not automatically by Claude Code.
-
-Install the Claude Code skill globally:
+Install the skills globally:
 
 ```bash
 cargo run -- install
 ```
 
-Install locally to current project (finds project root via .git or .claude
+Install locally to current project (finds project root via .git or .agents
 directory):
 
 ```bash
 cargo run -- install --local
 ```
 
+Install to a custom path:
+
+```bash
+cargo run -- install --path /custom/skills/directory
+```
+
 Skill installation locations:
 
-- Global: `~/.claude/skills/review-to-md/`
-- Local: `<project-root>/.claude/skills/review-to-md/` (where project root is
+- Global: `~/.agents/skills/review-to-md/`
+- Local: `<project-root>/.agents/skills/review-to-md/` (where project root is
   found by walking up from current directory)
+- Custom: Any path specified with `--path` option
 
-**Note to Claude Code**: The binary is called `repo-to-md`, but the skill
-`review-to-md`. The binary is a general tool. The skill is designed to only
-handle PR reviews.
+The skills follow the [AgentSkills specification](https://agentskills.io/) and
+can be used by any compatible AI agent.
 
 ### Temporary files and exploration scripts
 
@@ -476,20 +479,20 @@ fn run_graphql_query(...) { ... }
 When modifying the public CLI interface (adding/removing/changing flags):
 
 1. Update Readme.md with user-facing documentation
-2. Update CLAUDE.md with developer-facing details
+2. Update AGENTS.md with developer-facing details
 3. Update help text in argh derive attributes
 4. Add tests if the change affects behavior
 
-### Keeping CLAUDE.md current
+### Keeping AGENTS.md current
 
-Always update CLAUDE.md when making changes that affect:
+Always update AGENTS.md when making changes that affect:
 
 - **CLI interface** - New commands, changed flags, renamed subcommands
 - **Project structure** - New modules, reorganized directories, moved files
 - **Build/test commands** - Changed cargo commands, new test patterns
 - **Key architectural decisions** - New patterns, changed data flow
 
-CLAUDE.md serves as the primary reference for AI assistants working with this
+AGENTS.md serves as the primary reference for AI assistants working with this
 codebase. Outdated documentation leads to incorrect assumptions and wasted
 effort.
 
@@ -573,33 +576,31 @@ println!("Hello {name}");  // OK - single variable, inline capture
 - Exception: Proper nouns and acronyms remain capitalized (e.g., "GitHub API
   usage")
 
-## Claude Code skills
+## AI Agent Skills
 
 ### Skills documentation
 
-Skills are modular capabilities that extend Claude Code's functionality. For
-complete documentation on creating and using skills:
-
-- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills) -
-  How to create, install, and use skills in Claude Code
+Skills are modular capabilities that follow the [AgentSkills specification](https://agentskills.io/)
+for compatibility with various AI agents.
 
 ### Skill installation locations
 
-- **Global skills**: `~/.claude/skills/` - Available across all projects
-- **Project skills**: `.claude/skills/` - Shared with team, version controlled
+- **Global skills**: `~/.agents/skills/` - Available across all projects
+- **Project skills**: `.agents/skills/` - Shared with team, version controlled
+- **Custom skills**: Any path specified with `--path` option
 
 **Important**: The `skills/` directory at the repo root contains the source
-skill files. The `.claude/skills/` directory contains installed copies generated
+skill files. The `.agents/skills/` directory contains installed copies generated
 by `repo-to-md install --local`. Always edit skills in `skills/`, never in
-`.claude/skills/` directly.
+`.agents/skills/` directly.
 
 ### repo-to-md skill
 
 The repo-to-md skill is bundled with the binary and can be installed using:
 
 ```bash
-repo-to-md install [--local]
+repo-to-md install [--local] [--path /custom/path]
 ```
 
-The skill enables Claude Code to automatically use repo-to-md when working with
+The skill enables AI agents to automatically use repo-to-md when working with
 PR reviews.
