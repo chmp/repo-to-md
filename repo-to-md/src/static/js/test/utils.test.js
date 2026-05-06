@@ -6,6 +6,8 @@ import {
     escapeHtml,
     escapeAttr,
     getFileName,
+    getFilePath,
+    getOldFilePath,
     formatDate,
     getRowType,
     groupCommentsByLine,
@@ -74,52 +76,20 @@ minitest("escapeAttr", ({ run, assertEqual }) => {
 
 // getRowType tests - Core diff rendering logic
 minitest("getRowType", ({ run, assertEqual }) => {
-    run("returns 'modified' for deletion+addition pair", ({ assertEqual }) => {
-        const row = {
-            old_line: { line_type: 'deletion' },
-            new_line: { line_type: 'addition' },
-        };
-        assertEqual(getRowType(row), "modified");
+    run("returns 'context' for context lines", ({ assertEqual }) => {
+        assertEqual(getRowType({ status: 'context' }), "context");
     });
 
-    run("returns 'context' for matching lines", ({ assertEqual }) => {
-        const row = {
-            old_line: { line_type: 'context' },
-            new_line: { line_type: 'context' },
-        };
-        assertEqual(getRowType(row), "context");
+    run("returns 'deletion' for removed lines", ({ assertEqual }) => {
+        assertEqual(getRowType({ status: 'removed' }), "deletion");
     });
 
-    run("returns 'deletion' for old_line only", ({ assertEqual }) => {
-        const row = {
-            old_line: { line_type: 'deletion' },
-            new_line: null,
-        };
-        assertEqual(getRowType(row), "deletion");
+    run("returns 'addition' for added lines", ({ assertEqual }) => {
+        assertEqual(getRowType({ status: 'added' }), "addition");
     });
 
-    run("returns 'addition' for new_line only", ({ assertEqual }) => {
-        const row = {
-            old_line: null,
-            new_line: { line_type: 'addition' },
-        };
-        assertEqual(getRowType(row), "addition");
-    });
-
-    run("returns 'context' for both lines with non-modification types", ({ assertEqual }) => {
-        const row = {
-            old_line: { line_type: 'context' },
-            new_line: { line_type: 'addition' },
-        };
-        assertEqual(getRowType(row), "context");
-    });
-
-    run("returns 'context' for empty row", ({ assertEqual }) => {
-        const row = {
-            old_line: null,
-            new_line: null,
-        };
-        assertEqual(getRowType(row), "context");
+    run("returns 'context' for missing status", ({ assertEqual }) => {
+        assertEqual(getRowType({}), "context");
     });
 });
 
@@ -139,6 +109,16 @@ minitest("groupCommentsByLine", ({ run, assertEqual }) => {
     run("returns empty object for empty array", ({ assertEqual }) => {
         const result = groupCommentsByLine([]);
         assertEqual(result, {});
+    });
+
+    run("skips file-level comments", ({ assertEqual }) => {
+        const comments = [
+            { line: null, body: "file comment" },
+            { line: 5, body: "line comment" },
+        ];
+        const result = groupCommentsByLine(comments);
+        assertEqual(result[null], undefined);
+        assertEqual(result[5].length, 1);
     });
 
     run("preserves comment order within line", ({ assertEqual }) => {
@@ -165,14 +145,15 @@ minitest("getCommentsByFile", ({ run, assertEqual }) => {
         assertEqual(result["src/bar.js"].length, 1);
     });
 
-    run("puts global comments (line=null) under __general__", ({ assertEqual }) => {
+    run("puts only __global__ comments under __general__", ({ assertEqual }) => {
         const comments = [
-            { path: "src/foo.js", line: null, body: "global comment" },
+            { path: "__global__", line: null, body: "global comment" },
+            { path: "src/foo.js", line: null, body: "file-level comment" },
             { path: "src/foo.js", line: 10, body: "file comment" },
         ];
         const result = getCommentsByFile(comments);
         assertEqual(result["__general__"].length, 1);
-        assertEqual(result["src/foo.js"].length, 1);
+        assertEqual(result["src/foo.js"].length, 2);
     });
 
     run("always includes __general__ key even if empty", ({ assertEqual }) => {
@@ -241,11 +222,39 @@ minitest("formatDate", ({ run, assertEqual }) => {
 });
 
 // computeFileTreeItems tests
+minitest("getFilePath", ({ run, assertEqual }) => {
+    run("uses display path when provided", ({ assertEqual }) => {
+        assertEqual(getFilePath({ display_path: "src/file.js", to_path: "other.js" }), "src/file.js");
+    });
+
+    run("uses non-dev-null path", ({ assertEqual }) => {
+        assertEqual(getFilePath({ from_path: "src/deleted.js", to_path: "/dev/null" }), "src/deleted.js");
+    });
+
+    run("defaults to to_path", ({ assertEqual }) => {
+        assertEqual(getFilePath({ from_path: "old.js", to_path: "new.js" }), "new.js");
+    });
+});
+
+minitest("getOldFilePath", ({ run, assertEqual }) => {
+    run("uses previous path when provided", ({ assertEqual }) => {
+        assertEqual(getOldFilePath({ previous_path: "old.js" }), "old.js");
+    });
+
+    run("returns from_path when it differs from display path", ({ assertEqual }) => {
+        assertEqual(getOldFilePath({ from_path: "old.js", to_path: "new.js" }), "old.js");
+    });
+
+    run("returns null for matching paths", ({ assertEqual }) => {
+        assertEqual(getOldFilePath({ from_path: "same.js", to_path: "same.js" }), null);
+    });
+});
+
 minitest("computeFileTreeItems", ({ run, assertEqual }) => {
     run("computes items with all properties", ({ assertEqual }) => {
         const files = [
-            { path: "src/foo.js", status: "modified" },
-            { path: "src/bar.js", status: "added" },
+            { to_path: "src/foo.js", status: "modified" },
+            { to_path: "src/bar.js", status: "added" },
         ];
         const commentsByFile = {
             "src/foo.js": [{ id: "1" }, { id: "2" }],
@@ -272,7 +281,7 @@ minitest("computeFileTreeItems", ({ run, assertEqual }) => {
     });
 
     run("handles missing file in commentsByFile", ({ assertEqual }) => {
-        const files = [{ path: "src/new.js", status: "added" }];
+        const files = [{ to_path: "src/new.js", status: "added" }];
         const commentsByFile = { "__general__": [] };
         const viewedFiles = new Set();
 
@@ -284,9 +293,9 @@ minitest("computeFileTreeItems", ({ run, assertEqual }) => {
 
     run("preserves file order", ({ assertEqual }) => {
         const files = [
-            { path: "a.js", status: "modified" },
-            { path: "z.js", status: "added" },
-            { path: "m.js", status: "deleted" },
+            { to_path: "a.js", status: "modified" },
+            { to_path: "z.js", status: "added" },
+            { to_path: "m.js", status: "deleted" },
         ];
         const result = computeFileTreeItems(files, {}, new Set());
 

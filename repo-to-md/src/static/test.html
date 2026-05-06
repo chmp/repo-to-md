@@ -39,22 +39,32 @@
         .instructions li {
             margin-bottom: 8px;
         }
+        #test-results {
+            background: #202040;
+            border: 1px solid #4a4a6a;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+        }
+        .test-result {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-top: 1px solid #3a3a5e;
+        }
+        .test-result:first-child {
+            border-top: none;
+        }
+        .test-result.failed {
+            color: #ff8080;
+        }
     </style>
 </head>
 <body>
     <h1>Frontend Unit Tests</h1>
 
-    <div class="instructions">
-        <h2>How to run</h2>
-        <ol>
-            <li>Open browser developer tools (<code>F12</code>)</li>
-            <li>Navigate to the <code>Console</code> tab</li>
-            <li>Test results will appear in the console</li>
-            <li>Green = passed, Red = failed</li>
-        </ol>
-    </div>
-
-    <p>Loading tests...</p>
+    <p id="test-status">Loading tests...</p>
+    <div id="test-results"></div>
 
     <!-- Test framework -->
     <script src="js/test/minitest.js"></script>
@@ -64,7 +74,29 @@
     <script type="module" src="js/test/components.test.js"></script>
 
     <script>
-        document.querySelector('p').textContent = 'Tests loaded. Check the console for results.';
+        const status = document.getElementById('test-status');
+        const results = document.getElementById('test-results');
+        const summaries = [];
+        window.frontendTestResults = summaries;
+        minitest.onResult(result => {
+            summaries.push(result);
+            const passed = summaries.reduce((total, item) => total + item.passed, 0);
+            const total = summaries.reduce((sum, item) => sum + item.total, 0);
+            const errors = summaries.reduce((sum, item) => sum + item.errors, 0);
+            status.textContent = summaries.length === 0
+                ? 'Tests loaded. Waiting for results...'
+                : `Frontend tests passed: ${passed}/${total}`;
+            results.innerHTML = summaries.map(item => `
+                <div class="test-result ${item.errors ? 'failed' : ''}">
+                    <span>${item.name}</span>
+                    <span>${item.passed}/${item.total}</span>
+                </div>
+            `).join('');
+            if (errors > 0) {
+                status.textContent += ` (${errors} errors)`;
+            }
+        });
+        status.textContent = 'Tests loaded. Waiting for results...';
     </script>
 </body>
 </html>

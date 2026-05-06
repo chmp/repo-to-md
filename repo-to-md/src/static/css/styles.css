@@ -169,6 +169,12 @@ html {
     border-bottom: 1px solid var(--border-color);
 }
 
+.file-tree-loading {
+    padding: 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
 .file-tree-list {
     list-style: none;
 }
@@ -256,11 +262,24 @@ diff-view {
 .diff-file-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     padding: 10px 16px;
     background: var(--bg-tertiary);
     border-bottom: 1px solid var(--border-color);
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     font-size: 13px;
+}
+
+.diff-file-title {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.file-comment-button {
+    flex: none;
+    font-family: inherit;
 }
 
 .diff-file-status {
@@ -385,6 +404,17 @@ diff-view {
     border: 1px solid var(--border-color);
     border-left: 3px solid var(--accent-blue);
     border-radius: 6px;
+    margin: 8px 16px;
+}
+
+.file-comments-section {
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 0;
+}
+
+.file-comments-section review-comment,
+.file-comments-section comment-form {
     margin: 8px 16px;
 }
 

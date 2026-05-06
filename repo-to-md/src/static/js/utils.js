@@ -54,25 +54,36 @@ export function formatDate(timestamp) {
     });
 }
 
+export function getFilePath(file) {
+    if (!file) return '';
+    if (file.display_path) return file.display_path;
+    if (file.to_path === '/dev/null' && file.from_path) return file.from_path;
+    return file.to_path || file.path || '';
+}
+
+export function getOldFilePath(file) {
+    if (!file) return null;
+    if (file.previous_path) return file.previous_path;
+    const path = getFilePath(file);
+    return file.from_path && file.from_path !== '/dev/null' && file.from_path !== path
+        ? file.from_path
+        : null;
+}
+
 /**
- * Classify a diff row type based on its line data
- * @param {Object} row - Diff row with old_line and new_line properties
- * @returns {string} Row type: 'modified', 'context', 'deletion', or 'addition'
+ * Classify a side-by-side diff line for CSS.
+ * @param {Object} line - Side-by-side line with status property
+ * @returns {string} Row type: 'context', 'deletion', or 'addition'
  */
-export function getRowType(row) {
-    if (row.old_line && row.new_line) {
-        if (row.old_line.line_type === 'deletion' && row.new_line.line_type === 'addition') {
-            return 'modified';
-        }
-        return 'context';
+export function getRowType(line) {
+    switch (line?.status) {
+        case 'added':
+            return 'addition';
+        case 'removed':
+            return 'deletion';
+        default:
+            return 'context';
     }
-    if (row.old_line && row.old_line.line_type === 'deletion') {
-        return 'deletion';
-    }
-    if (row.new_line && row.new_line.line_type === 'addition') {
-        return 'addition';
-    }
-    return 'context';
 }
 
 /**
@@ -83,6 +94,7 @@ export function getRowType(row) {
 export function groupCommentsByLine(comments) {
     const result = {};
     for (const comment of comments) {
+        if (comment.line === null || comment.line === undefined) continue;
         if (!result[comment.line]) {
             result[comment.line] = [];
         }
@@ -99,7 +111,7 @@ export function groupCommentsByLine(comments) {
 export function getCommentsByFile(comments) {
     const result = { '__general__': [] };
     for (const comment of comments) {
-        const key = comment.line === null ? '__general__' : comment.path;
+        const key = comment.path === '__global__' ? '__general__' : comment.path;
         if (!result[key]) {
             result[key] = [];
         }
@@ -117,10 +129,10 @@ export function getCommentsByFile(comments) {
  */
 export function computeFileTreeItems(files, commentsByFile, viewedFiles) {
     return files.map(file => ({
-        path: file.path,
+        path: getFilePath(file),
         status: file.status,
-        commentCount: (commentsByFile[file.path] || []).filter(c => !c.is_minimized).length,
-        isViewed: viewedFiles.has(file.path),
+        commentCount: (commentsByFile[getFilePath(file)] || []).filter(c => !c.is_minimized).length,
+        isViewed: viewedFiles.has(getFilePath(file)),
     }));
 }
 
@@ -142,11 +154,12 @@ export function getCommentPositions(files, commentsByFile, skipMinimized = false
 
     // File comments in file order, sorted by line within each file
     for (const file of files) {
-        const fileComments = (commentsByFile[file.path] || [])
+        const path = getFilePath(file);
+        const fileComments = (commentsByFile[path] || [])
             .filter(c => !skipMinimized || !c.is_minimized)
             .sort((a, b) => (a.line || 0) - (b.line || 0));
         for (const c of fileComments) {
-            positions.push({ path: file.path, line: c.line, id: c.id });
+            positions.push({ path, line: c.line, id: c.id });
         }
     }
 

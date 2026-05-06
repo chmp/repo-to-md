@@ -10,13 +10,14 @@ use serde::{Deserialize, Serialize};
 
 use super::state::AppState;
 use crate::client::{Comment, User};
+use crate::local::highlighting::{RenderedSideBySideFile, render_diff};
 
 /// Response for GET /api/v1/session - combined endpoint for all read-only data
 #[derive(Serialize)]
 pub struct SessionResponse {
     pub start_ref: String,
     pub end_ref: String,
-    pub files: Vec<crate::diff::FileDiff>,
+    pub files: Vec<RenderedSideBySideFile>,
     pub comments: Vec<Comment>,
     pub viewed_files: Vec<String>,
 }
@@ -26,7 +27,7 @@ pub async fn get_session(State(state): State<Arc<AppState>>) -> Json<SessionResp
     Json(SessionResponse {
         start_ref: state.refspec.start_ref.clone(),
         end_ref: state.refspec.end_ref.clone(),
-        files: state.diff.files.clone(),
+        files: render_diff(&state.diff),
         comments: state.get_comments(),
         viewed_files: state.get_viewed_files(),
     })

@@ -2,7 +2,6 @@
 /**
  * Minimal JS testing
  *
- *
  * Minitest executes the supplied test. Test execution logs to the javascript
  * console. Minitest supports both synchronous and asynchronous tests (with
  * timeouts).
@@ -53,9 +52,15 @@
  * intended. To support asynchronous tests, minitest executes all test in a
  * promise one after the other. Therefore nested minitest calls will execute
  * after the test function has ended.
+ *
+ * Use `minitest.onResult` to register a result handler that is called with the
+ * results of each test scope. It is called with an object with the keys `name`,
+ * `total`, `passed`, `errors`.
  */
 const minitest = (() => {
     "use strict";
+
+    const resultHandlers = [];
 
     // adapted from https://stackoverflow.com/a/53593328
     const stableStringify = obj => {
@@ -142,9 +147,21 @@ const minitest = (() => {
                     `%c[%s] passed: %d, errors: %d, total: %d`,
                     style, testName, summary.passed, summary.errors, summary.total,
                 );
+                const result = { name: testName, ...summary };
+                for (const handler of resultHandlers) {
+                    try {
+                        handler(result);
+                    } catch (err) {
+                        window.console.error("minitest result handler failed", err);
+                    }
+                }
             });
         },
     });
 
-    return scope(newContext(null)).run;
+    const run = scope(newContext(null)).run;
+    run.onResult = handler => {
+        resultHandlers.push(handler);
+    };
+    return run;
 })();

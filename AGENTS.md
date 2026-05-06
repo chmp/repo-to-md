@@ -73,6 +73,16 @@ Run a specific test:
 cargo test test_name
 ```
 
+Run frontend browser tests:
+
+```bash
+nix run .#frontend-test
+```
+
+The frontend test runner serves `repo-to-md/src/static/test.html` locally and
+executes it in headless Chromium via Python Playwright. The flake provides the
+Nix-packaged Playwright browser bundle required on NixOS.
+
 ### Build
 
 ```bash

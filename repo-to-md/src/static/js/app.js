@@ -6,7 +6,7 @@
 import * as api from './api.js';
 import './file-tree.js';
 import './diff-view.js';
-import { getCommentsByFile, computeFileTreeItems, getCommentPositions } from './utils.js';
+import { getCommentsByFile, computeFileTreeItems, getCommentPositions, getFilePath } from './utils.js';
 
 export class App {
     constructor() {
@@ -28,6 +28,8 @@ export class App {
     }
 
     async init() {
+        this.showLoading();
+
         try {
             // Load all session data in a single request
             const session = await api.fetchSession();
@@ -35,7 +37,7 @@ export class App {
             this.diff = session;
             this.comments = session.comments;
             this.viewedFiles = session.viewed_files;
-            this.filesMap = new Map(session.files.map(f => [f.path, f]));
+            this.filesMap = new Map(session.files.map(f => [getFilePath(f), f]));
 
             // Update ref info
             const refText = session.end_ref
@@ -52,13 +54,42 @@ export class App {
 
             // Select first file if available
             if (session.files.length > 0) {
-                this.selectFileForDiffView(session.files[0].path);
-                this.fileTree.selectFile(session.files[0].path);
+                const firstPath = getFilePath(session.files[0]);
+                this.selectFileForDiffView(firstPath);
+                this.fileTree.selectFile(firstPath);
+            } else {
+                this.diffView.setCurrentFile(null, []);
             }
         } catch (error) {
             console.error('Failed to load data:', error);
-            this.refInfo.textContent = 'Error loading diff';
+            this.showLoadError();
         }
+    }
+
+    showLoading() {
+        this.refInfo.textContent = 'Loading diff...';
+        this.fileTree.innerHTML = `
+            <div class="file-tree-header">
+                <span>Changed Files</span>
+            </div>
+            <div class="file-tree-loading">Loading files...</div>
+        `;
+        this.diffView.innerHTML = `
+            <div class="empty-state">
+                <h3>Loading diff</h3>
+                <p>Fetching the diff and comments.</p>
+            </div>
+        `;
+    }
+
+    showLoadError() {
+        this.refInfo.textContent = 'Error loading diff';
+        this.diffView.innerHTML = `
+            <div class="empty-state">
+                <h3>Error loading diff</h3>
+                <p>Check the server logs and refresh this page.</p>
+            </div>
+        `;
     }
 
     /**
@@ -177,7 +208,7 @@ export class App {
     navigateFile(direction) {
         if (!this.diff?.files?.length) return;
 
-        const navList = ['__general__', ...this.diff.files.map(f => f.path)];
+        const navList = ['__general__', ...this.diff.files.map(getFilePath)];
         const currentIndex = navList.indexOf(this.fileTree.selectedFile);
         const baseIndex = currentIndex === -1 ? (direction > 0 ? -1 : 0) : currentIndex;
         const newIndex = (baseIndex + direction + navList.length) % navList.length;

@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use argh::FromArgs;
 
-use crate::diff::SideBySideDiff;
 use crate::formatting::{group_comments_by_file, write_comments_as_markdown};
 use crate::local::CommentsFile;
+use crate::side_by_side_diff::SideBySideDiff;
 
 /// Format local review comments as markdown for LLM consumption
 #[derive(FromArgs)]
@@ -43,7 +43,7 @@ impl FormatCommand {
             return Ok(());
         }
 
-        let diff = SideBySideDiff::parse(&comments_file.raw_diff);
+        let diff = SideBySideDiff::parse(&comments_file.raw_diff)?;
 
         // Populate diff_hunk for comments that have line numbers
         let mut comments = comments_file.comments;
