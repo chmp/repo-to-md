@@ -2,7 +2,6 @@
 /**
  * Minimal JS testing
  *
- *
  * Minitest executes the supplied test. Test execution logs to the javascript
  * console. Minitest supports both synchronous and asynchronous tests (with
  * timeouts).
@@ -53,6 +52,10 @@
  * intended. To support asynchronous tests, minitest executes all test in a
  * promise one after the other. Therefore nested minitest calls will execute
  * after the test function has ended.
+ *
+ * Use `minitest.onResult` to register a result handler that is called with the
+ * results of each test scope. It is called with an object with the keys `name`,
+ * `total`, `passed`, `errors`.
  */
 const minitest = (() => {
     "use strict";
