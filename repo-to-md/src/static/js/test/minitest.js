@@ -57,7 +57,17 @@
 const minitest = (() => {
     "use strict";
 
-    globalThis.__minitest_results = [];
+    const resultHandlers = [];
+
+    const notifyResult = result => {
+        for (const handler of resultHandlers) {
+            try {
+                handler(result);
+            } catch (err) {
+                window.console.error("minitest result handler failed", err);
+            }
+        }
+    };
 
     // adapted from https://stackoverflow.com/a/53593328
     const stableStringify = obj => {
@@ -144,18 +154,19 @@ const minitest = (() => {
                     `%c[%s] passed: %d, errors: %d, total: %d`,
                     style, testName, summary.passed, summary.errors, summary.total,
                 );
-                globalThis.__minitest_results.push({
+                notifyResult({
                     name: testName,
                     passed: summary.passed,
                     errors: summary.errors,
                     total: summary.total,
                 });
-                globalThis.__renderMinitestSummary?.();
             });
         },
     });
 
-    return scope(newContext(null)).run;
+    const run = scope(newContext(null)).run;
+    run.onResult = handler => {
+        resultHandlers.push(handler);
+    };
+    return run;
 })();
-
-globalThis.minitest = minitest;

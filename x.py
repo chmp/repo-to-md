@@ -129,7 +129,7 @@ async def frontend_test():
 
             await page.goto(url, wait_until="networkidle")
             await page.wait_for_timeout(10000)
-            diagnostics["minitest_type"] = await page.evaluate("typeof globalThis.minitest")
+            diagnostics["minitest_type"] = await page.evaluate("typeof minitest")
             diagnostics["body_text"] = await page.evaluate("document.body.innerText")
             diagnostics["scripts"] = await page.evaluate(
                 "[...document.scripts].map(script => ({ src: script.src, type: script.type }))"
@@ -137,7 +137,7 @@ async def frontend_test():
             diagnostics["resources"] = await page.evaluate(
                 "[...performance.getEntriesByType('resource')].map(entry => entry.name)"
             )
-            stored_summaries = await page.evaluate("globalThis.__minitest_results || []")
+            stored_summaries = await page.evaluate("window.frontendTestResults || []")
             for summary in stored_summaries:
                 item = (
                     summary["name"],
