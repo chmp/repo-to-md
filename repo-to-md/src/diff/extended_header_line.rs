@@ -6,6 +6,9 @@ use super::parser::LineParser;
 use super::path::{Path, PathParser};
 use super::percentage::{Percentage, PercentageParser};
 
+/// A single extended header line from a git patch.
+///
+/// Example: `rename from old.rs` becomes `ExtendedHeaderLine::RenameFrom`.
 #[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub enum ExtendedHeaderLine<'a> {
     OldMode(Mode<'a>),
@@ -49,61 +52,52 @@ impl<'a> LineParser<'a> for ExtendedHeaderLineParser {
 
     fn parse_line(&self, line: &'a str) -> Result<Option<Self::Output>> {
         if let Some(line) = strip_extended_header_prefix(line, "old mode")? {
-            return Ok(Some(ExtendedHeaderLine::OldMode(
+            Ok(Some(ExtendedHeaderLine::OldMode(
                 ModeParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "new mode")? {
-            return Ok(Some(ExtendedHeaderLine::NewMode(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "new mode")? {
+            Ok(Some(ExtendedHeaderLine::NewMode(
                 ModeParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "deleted file mode")? {
-            return Ok(Some(ExtendedHeaderLine::DeletedFileMode(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "deleted file mode")? {
+            Ok(Some(ExtendedHeaderLine::DeletedFileMode(
                 ModeParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "new file mode")? {
-            return Ok(Some(ExtendedHeaderLine::NewFileMode(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "new file mode")? {
+            Ok(Some(ExtendedHeaderLine::NewFileMode(
                 ModeParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "copy from")? {
-            return Ok(Some(ExtendedHeaderLine::CopyFrom(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "copy from")? {
+            Ok(Some(ExtendedHeaderLine::CopyFrom(
                 PathParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "copy to")? {
-            return Ok(Some(ExtendedHeaderLine::CopyTo(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "copy to")? {
+            Ok(Some(ExtendedHeaderLine::CopyTo(
                 PathParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "rename from")? {
-            return Ok(Some(ExtendedHeaderLine::RenameFrom(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "rename from")? {
+            Ok(Some(ExtendedHeaderLine::RenameFrom(
                 PathParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "rename to")? {
-            return Ok(Some(ExtendedHeaderLine::RenameTo(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "rename to")? {
+            Ok(Some(ExtendedHeaderLine::RenameTo(
                 PathParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "similarity index")? {
-            return Ok(Some(ExtendedHeaderLine::SimilarityIndex(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "similarity index")? {
+            Ok(Some(ExtendedHeaderLine::SimilarityIndex(
                 PercentageParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "dissimilarity index")? {
-            return Ok(Some(ExtendedHeaderLine::DissimilarityIndex(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "dissimilarity index")? {
+            Ok(Some(ExtendedHeaderLine::DissimilarityIndex(
                 PercentageParser.parse_line_required(line)?,
-            )));
-        }
-        if let Some(line) = strip_extended_header_prefix(line, "index")? {
-            return Ok(Some(ExtendedHeaderLine::Index(
+            )))
+        } else if let Some(line) = strip_extended_header_prefix(line, "index")? {
+            Ok(Some(ExtendedHeaderLine::Index(
                 IndexLineParser.parse_line_required(line)?,
-            )));
+            )))
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 }
 

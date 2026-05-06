@@ -1,0 +1,6 @@
+---
+source: repo-to-md/src/tests.rs
+expression: "parsed.files[0].chunks[0].to_unified()"
+---
+@@ -1,1 +0,0 @@
+-foo

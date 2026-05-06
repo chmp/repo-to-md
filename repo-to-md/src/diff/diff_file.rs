@@ -4,6 +4,10 @@ use super::chunk::{Chunk, ChunkParser};
 use super::diff_file_header::{DiffFileHeader, DiffFileHeaderParser};
 use super::parser::MultilineParser;
 
+/// The parsed diff for a single file.
+///
+/// Example: one `diff --git a/src/lib.rs b/src/lib.rs` block becomes one
+/// `DiffFile` containing its file header and all parsed chunks.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct DiffFile<'a> {
     pub header: DiffFileHeader<'a>,

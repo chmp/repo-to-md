@@ -6,6 +6,10 @@ use crate::diff::utils::AtLeastOne;
 
 use super::LineParser;
 
+/// The range metadata from an `@@` chunk header.
+///
+/// Example: `@@ -5,2 +8,3 @@` stores `5..7` in `from_ranges` and `8..11` in
+/// `to_range`.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct ChunkHeader {
     pub from_ranges: AtLeastOne<Range<usize>>,

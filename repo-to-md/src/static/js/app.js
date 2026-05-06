@@ -28,6 +28,8 @@ export class App {
     }
 
     async init() {
+        this.showLoading();
+
         try {
             // Load all session data in a single request
             const session = await api.fetchSession();
@@ -55,11 +57,39 @@ export class App {
                 const firstPath = getFilePath(session.files[0]);
                 this.selectFileForDiffView(firstPath);
                 this.fileTree.selectFile(firstPath);
+            } else {
+                this.diffView.setCurrentFile(null, []);
             }
         } catch (error) {
             console.error('Failed to load data:', error);
-            this.refInfo.textContent = 'Error loading diff';
+            this.showLoadError();
         }
+    }
+
+    showLoading() {
+        this.refInfo.textContent = 'Loading diff...';
+        this.fileTree.innerHTML = `
+            <div class="file-tree-header">
+                <span>Changed Files</span>
+            </div>
+            <div class="file-tree-loading">Loading files...</div>
+        `;
+        this.diffView.innerHTML = `
+            <div class="empty-state">
+                <h3>Loading diff</h3>
+                <p>Fetching the diff and comments.</p>
+            </div>
+        `;
+    }
+
+    showLoadError() {
+        this.refInfo.textContent = 'Error loading diff';
+        this.diffView.innerHTML = `
+            <div class="empty-state">
+                <h3>Error loading diff</h3>
+                <p>Check the server logs and refresh this page.</p>
+            </div>
+        `;
     }
 
     /**

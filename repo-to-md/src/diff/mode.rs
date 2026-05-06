@@ -4,6 +4,10 @@ use anyhow::{Result, ensure};
 
 use super::parser::Parser;
 
+/// A git file mode.
+///
+/// Example: `100644` from an `old mode`, `new mode`, or `index` line is stored
+/// as a `Mode`.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Mode<'a>(pub Cow<'a, str>);
 

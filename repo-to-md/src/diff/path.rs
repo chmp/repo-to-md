@@ -4,6 +4,10 @@ use anyhow::{Result, bail, ensure};
 
 use super::parser::LineParser;
 
+/// A path parsed from a git patch.
+///
+/// Example: `"src/lib.rs"` may come from `diff --git`, `---`, `+++`, rename, or
+/// copy header lines.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Path<'a>(pub Cow<'a, str>);
 
@@ -129,5 +133,23 @@ fn parse_path() {
     assert_eq!(
         PathParser.parse_line_expected("\"utf8-\\302\\265.md\""),
         Path::owned("utf8-\u{00b5}.md")
+    );
+}
+
+#[test]
+fn parse_git_generated_quoted_path_examples() {
+    // Fixtures generated with `git diff` for paths containing tab, newline,
+    // quote, backslash, and UTF-8 bytes with core.quotePath enabled.
+    assert_eq!(
+        PathParser.parse_line_expected("\"foo\\tbar\""),
+        Path::owned("foo\tbar")
+    );
+    assert_eq!(
+        PathParser.parse_line_expected("\"foo\\nbar\""),
+        Path::owned("foo\nbar")
+    );
+    assert_eq!(
+        PathParser.parse_line_expected("\"quote\\\"backslash\\\\micro\\302\\265.rs\""),
+        Path::owned("quote\"backslash\\micro\u{00b5}.rs")
     );
 }

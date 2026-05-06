@@ -8,6 +8,10 @@ use super::chunk_header::ChunkHeaderParser;
 use super::diff_line::{DiffLine, DiffLineParser};
 use super::parser::MultilineParser;
 
+/// A unified diff chunk and its parsed lines.
+///
+/// Example: an `@@ -1,1 +1,2 @@` hunk becomes a `Chunk` with one source range,
+/// one target range, and the following context/add/remove lines.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Chunk<'a> {
     pub from_ranges: AtLeastOne<Range<usize>>,

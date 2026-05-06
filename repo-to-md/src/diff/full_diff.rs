@@ -5,6 +5,10 @@ use super::DiffFile;
 use super::DiffFileParser;
 use super::MultilineParser;
 
+/// A complete patch made of one or more file diffs.
+///
+/// Example: parsing `git diff -p` output with two changed files produces a
+/// `Diff` with two [`DiffFile`] entries.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Diff<'a> {
     pub files: Vec<DiffFile<'a>>,

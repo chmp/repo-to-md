@@ -4,6 +4,10 @@ use super::hash::{Hash, HashParser};
 use super::mode::{Mode, ModeParser};
 use super::parser::Parser;
 
+/// The parsed value of an `index` extended header line.
+///
+/// Example: `index 7626a52..16399c7 100644` stores old/new hashes and the
+/// optional file mode.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct IndexLine<'a> {
     pub old: Hash<'a>,

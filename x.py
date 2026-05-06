@@ -8,14 +8,12 @@
 import asyncio
 import contextlib
 import os
-import re
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from typing import Annotated
 
-from playwright.async_api import async_playwright
 from texc import main, sh, Help
 
 
@@ -79,6 +77,8 @@ async def test(
 
 async def frontend_test():
     """Run browser frontend tests"""
+    from playwright.async_api import async_playwright
+
     static_dir = Path("repo-to-md/src/static").resolve()
     if not static_dir.exists():
         raise RuntimeError(f"static directory does not exist: {static_dir}")
@@ -99,10 +99,6 @@ async def frontend_test():
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
-    summary_pattern = re.compile(
-        r"\[(?P<name>.+?)\]\s+passed:\s+(?P<passed>\d+),\s+"
-        r"errors:\s+(?P<errors>\d+),\s+total:\s+(?P<total>\d+)"
-    )
     url = f"http://127.0.0.1:{server.server_port}/test.html"
 
     try:
@@ -112,15 +108,6 @@ async def frontend_test():
                 console_messages.append(f"{message.type}: {text}")
                 if message.type == "error" and "Failed to load resource" not in text:
                     console_errors.append(f"{message.type}: {text}")
-                if match := summary_pattern.search(text):
-                    summaries.append(
-                        (
-                            match.group("name"),
-                            int(match.group("passed")),
-                            int(match.group("errors")),
-                            int(match.group("total")),
-                        )
-                    )
 
             launch_options = {}
             if executable_path := os.environ.get("PLAYWRIGHT_LAUNCH_OPTIONS_EXECUTABLE_PATH"):

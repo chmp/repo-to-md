@@ -1,0 +1,5 @@
+---
+source: repo-to-md/src/tests.rs
+expression: "chunk_new_content(&parsed.files[0].chunks[0])"
+---
+foo

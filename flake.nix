@@ -42,15 +42,6 @@
         };
       in
       {
-        devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
-            playwright-driver.browsers
-            uv
-          ];
-
-          shellHook = playwrightEnv;
-        };
-
         apps.frontend-test = {
           type = "app";
           program = "${frontend-test}/bin/repo-to-md-frontend-test";

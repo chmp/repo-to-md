@@ -6,6 +6,10 @@ use super::file_header_line::{NewFileHeaderLineParser, OldFileHeaderLineParser};
 use super::parser::{LineParser, MultilineParser};
 use super::path::Path;
 
+/// A parsed header block without its following chunks.
+///
+/// Example: this combines the `diff --git` line, any extended headers, and the
+/// `---`/`+++` file header lines.
 #[derive(PartialEq, Debug, serde::Serialize)]
 pub struct DiffHeaderBlock<'a> {
     pub diff: DiffHeader<'a>,

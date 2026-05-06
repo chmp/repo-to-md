@@ -7,6 +7,10 @@ use super::file_header_line::{NewFileHeaderLineParser, OldFileHeaderLineParser};
 use super::parser::MultilineParser;
 use super::path::Path;
 
+/// The complete header block before a file's chunks.
+///
+/// Example: a header may include `diff --git`, `index`, `---`, and `+++` lines.
+/// Combined diffs may contain multiple old file header paths.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct DiffFileHeader<'a> {
     pub header: DiffHeader<'a>,

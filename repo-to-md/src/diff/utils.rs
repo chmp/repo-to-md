@@ -1,6 +1,10 @@
 use anyhow::bail;
 use serde::Serialize;
 
+/// A non-empty list.
+///
+/// Example: combined diff chunk headers use `AtLeastOne<Range<usize>>` because
+/// every chunk has at least one source range.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AtLeastOne<T>(Vec<T>);
 

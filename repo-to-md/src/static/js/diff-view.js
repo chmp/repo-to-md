@@ -118,14 +118,19 @@ class DiffView extends HTMLElement {
         const filePath = getFilePath(file);
         const oldFilePath = getOldFilePath(file);
         const commentsByLine = groupCommentsByLine(this.currentComments);
+        const fileComments = this.currentComments.filter(comment => comment.line === null);
 
         this.innerHTML = `
             <div class="diff-file" id="file-${escapeAttr(filePath)}">
                 <div class="diff-file-header">
-                    <span class="diff-file-status ${file.status}"></span>
-                    <span>${escapeHtml(filePath)}</span>
-                    ${oldFilePath ? `<span style="color: var(--text-secondary)"> (renamed from ${escapeHtml(oldFilePath)})</span>` : ''}
+                    <div class="diff-file-title">
+                        <span class="diff-file-status ${file.status}"></span>
+                        <span>${escapeHtml(filePath)}</span>
+                        ${oldFilePath ? `<span style="color: var(--text-secondary)"> (renamed from ${escapeHtml(oldFilePath)})</span>` : ''}
+                    </div>
+                    <button class="button button-small file-comment-button" data-path="${escapeAttr(filePath)}">Add file comment</button>
                 </div>
+                ${this.renderFileComments(filePath, fileComments)}
                 ${file.chunks.map((chunk, chunkIndex) => this.renderChunk(file, chunk, chunkIndex, commentsByLine)).join('')}
             </div>
             <button class="diff-next-button btn ${this.remainingUnviewed === 0 ? 'all-done' : ''}" ${this.remainingUnviewed === 0 ? 'disabled' : ''}>
@@ -134,6 +139,26 @@ class DiffView extends HTMLElement {
         `;
 
         this.attachEventListeners(file);
+    }
+
+    renderFileComments(filePath, comments) {
+        const showForm = this.activeCommentForm &&
+                        this.activeCommentForm.path === filePath &&
+                        this.activeCommentForm.line === null;
+
+        if (comments.length === 0 && !showForm) {
+            return '';
+        }
+
+        let html = '<div class="file-comments-section">';
+        for (const comment of comments) {
+            html += `<review-comment data-comment-id="${escapeAttr(comment.id)}"></review-comment>`;
+        }
+        if (showForm) {
+            html += `<comment-form data-path="${escapeAttr(filePath)}" data-file-comment="true"></comment-form>`;
+        }
+        html += '</div>';
+        return html;
     }
 
     renderChunk(file, chunk, chunkIndex, commentsByLine) {
@@ -273,6 +298,12 @@ class DiffView extends HTMLElement {
     }
 
     attachEventListeners(file) {
+        this.querySelectorAll('.file-comment-button').forEach(button => {
+            button.addEventListener('click', () => {
+                this.showCommentForm(button.dataset.path, null, '');
+            });
+        });
+
         // Click on commentable lines
         this.querySelectorAll('.diff-line-content.commentable').forEach(cell => {
             cell.addEventListener('click', () => {
@@ -308,7 +339,9 @@ class DiffView extends HTMLElement {
         this.querySelectorAll('comment-form').forEach(el => {
             const path = el.dataset.path;
             const isGlobal = el.dataset.global === 'true';
-            const line = isGlobal ? null : parseInt(el.dataset.line, 10);
+            const line = isGlobal || el.dataset.fileComment === 'true'
+                ? null
+                : parseInt(el.dataset.line, 10);
             el.init(path, line, this.activeCommentForm?.diffHunk || '');
         });
 

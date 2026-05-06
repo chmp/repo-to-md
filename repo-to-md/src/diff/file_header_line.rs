@@ -4,6 +4,10 @@ use super::diff_header::parse_quoted_diff_header_path;
 use super::parser::LineParser;
 use super::path::Path;
 
+/// A `---` or `+++` file header line.
+///
+/// Example: `--- a/src/lib.rs` becomes `FileHeaderLine::Old(Some(path))`;
+/// `/dev/null` is represented as `None`.
 #[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub enum FileHeaderLine<'a> {
     // Merge diffs can include multiple old/from file header lines before the

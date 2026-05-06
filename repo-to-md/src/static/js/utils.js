@@ -94,6 +94,7 @@ export function getRowType(line) {
 export function groupCommentsByLine(comments) {
     const result = {};
     for (const comment of comments) {
+        if (comment.line === null || comment.line === undefined) continue;
         if (!result[comment.line]) {
             result[comment.line] = [];
         }
@@ -110,7 +111,7 @@ export function groupCommentsByLine(comments) {
 export function getCommentsByFile(comments) {
     const result = { '__general__': [] };
     for (const comment of comments) {
-        const key = comment.line === null ? '__general__' : comment.path;
+        const key = comment.path === '__global__' ? '__general__' : comment.path;
         if (!result[key]) {
             result[key] = [];
         }

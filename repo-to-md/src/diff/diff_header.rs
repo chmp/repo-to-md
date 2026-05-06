@@ -3,6 +3,10 @@ use anyhow::{Result, bail, ensure};
 use super::parser::LineParser;
 use super::path::{Path, parse_quoted_path};
 
+/// The leading `diff --git` line paths.
+///
+/// Example: `diff --git a/src/lib.rs b/src/lib.rs` stores `src/lib.rs` as both
+/// the left and right paths.
 #[derive(PartialEq, Debug, Clone, serde::Serialize)]
 pub struct DiffHeader<'a> {
     pub left: Path<'a>,

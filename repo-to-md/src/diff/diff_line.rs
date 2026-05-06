@@ -5,6 +5,10 @@ use crate::side_by_side_diff::{LineStatus, SideBySideLine};
 
 use super::LineParser;
 
+/// A single content line inside a diff chunk.
+///
+/// Example: `+let value = 1;` stores an added status and the content
+/// `let value = 1;`.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct DiffLine<'a> {
     from_status: AtLeastOne<DiffLineStatus>,
@@ -20,6 +24,10 @@ impl<'a> DiffLine<'a> {
     }
 }
 
+/// The marker status of a diff line for one parent.
+///
+/// Example: `+` becomes `Added`, `-` becomes `Removed`, and a leading space
+/// becomes `Unchanged`.
 #[derive(Debug, PartialEq, Clone, Copy, serde::Serialize)]
 pub enum DiffLineStatus {
     Added,
@@ -162,6 +170,23 @@ fn parse_multi_parent_diff_lines() {
                 .try_into()
                 .unwrap(),
             content: Cow::Borrowed(" added against both parents"),
+        },
+    );
+
+    let parser = DiffLineParser {
+        number_of_parents: 3,
+    };
+    assert_eq!(
+        parser.parse_line_expected("-+  mixed across three parents"),
+        DiffLine {
+            from_status: vec![
+                DiffLineStatus::Removed,
+                DiffLineStatus::Added,
+                DiffLineStatus::Unchanged,
+            ]
+            .try_into()
+            .unwrap(),
+            content: Cow::Borrowed(" mixed across three parents"),
         },
     );
 }

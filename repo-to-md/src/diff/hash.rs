@@ -4,6 +4,9 @@ use anyhow::{Result, ensure};
 
 use super::parser::Parser;
 
+/// A commit blob hash from an index line.
+///
+/// Example: `7626a52` from `index 7626a52..16399c7` is stored as a `Hash`.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Hash<'a>(pub Cow<'a, str>);
 

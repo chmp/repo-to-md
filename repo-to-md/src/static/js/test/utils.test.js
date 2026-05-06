@@ -111,6 +111,16 @@ minitest("groupCommentsByLine", ({ run, assertEqual }) => {
         assertEqual(result, {});
     });
 
+    run("skips file-level comments", ({ assertEqual }) => {
+        const comments = [
+            { line: null, body: "file comment" },
+            { line: 5, body: "line comment" },
+        ];
+        const result = groupCommentsByLine(comments);
+        assertEqual(result[null], undefined);
+        assertEqual(result[5].length, 1);
+    });
+
     run("preserves comment order within line", ({ assertEqual }) => {
         const comments = [
             { line: 5, body: "first" },
@@ -135,14 +145,15 @@ minitest("getCommentsByFile", ({ run, assertEqual }) => {
         assertEqual(result["src/bar.js"].length, 1);
     });
 
-    run("puts global comments (line=null) under __general__", ({ assertEqual }) => {
+    run("puts only __global__ comments under __general__", ({ assertEqual }) => {
         const comments = [
-            { path: "src/foo.js", line: null, body: "global comment" },
+            { path: "__global__", line: null, body: "global comment" },
+            { path: "src/foo.js", line: null, body: "file-level comment" },
             { path: "src/foo.js", line: 10, body: "file comment" },
         ];
         const result = getCommentsByFile(comments);
         assertEqual(result["__general__"].length, 1);
-        assertEqual(result["src/foo.js"].length, 1);
+        assertEqual(result["src/foo.js"].length, 2);
     });
 
     run("always includes __general__ key even if empty", ({ assertEqual }) => {

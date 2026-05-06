@@ -2,6 +2,9 @@ use anyhow::{Result, bail, ensure};
 
 use super::parser::Parser;
 
+/// A percentage value from a similarity or dissimilarity index.
+///
+/// Example: `93%` is stored as `Percentage(93)`.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Percentage(pub u8);
 

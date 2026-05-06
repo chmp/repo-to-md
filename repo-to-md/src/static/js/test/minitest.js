@@ -150,6 +150,7 @@ const minitest = (() => {
                     errors: summary.errors,
                     total: summary.total,
                 });
+                globalThis.__renderMinitestSummary?.();
             });
         },
     });
