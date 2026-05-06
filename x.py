@@ -5,13 +5,6 @@
 # [tool.uv.sources]
 # texc = { path = "../texc", editable = true }
 # ///
-import asyncio
-import contextlib
-import os
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from threading import Thread
 from typing import Annotated
 
 from texc import main, sh, Help
@@ -77,6 +70,14 @@ async def test(
 
 async def frontend_test():
     """Run browser frontend tests"""
+    import asyncio
+    import contextlib
+    import os
+    from functools import partial
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+    from pathlib import Path
+    from threading import Thread
+
     from playwright.async_api import async_playwright
 
     static_dir = Path("repo-to-md/src/static").resolve()
@@ -103,6 +104,7 @@ async def frontend_test():
 
     try:
         async with async_playwright() as playwright:
+
             def on_console(message):
                 text = message.text
                 console_messages.append(f"{message.type}: {text}")
@@ -110,7 +112,9 @@ async def frontend_test():
                     console_errors.append(f"{message.type}: {text}")
 
             launch_options = {}
-            if executable_path := os.environ.get("PLAYWRIGHT_LAUNCH_OPTIONS_EXECUTABLE_PATH"):
+            if executable_path := os.environ.get(
+                "PLAYWRIGHT_LAUNCH_OPTIONS_EXECUTABLE_PATH"
+            ):
                 launch_options["executable_path"] = executable_path
 
             browser = await playwright.chromium.launch(**launch_options)
@@ -120,11 +124,11 @@ async def frontend_test():
             page.on("console", on_console)
             page.on(
                 "response",
-                lambda response: response_errors.append(
-                    f"{response.status} {response.url}"
-                )
-                if response.status >= 400 and "favicon.ico" not in response.url
-                else None,
+                lambda response: (
+                    response_errors.append(f"{response.status} {response.url}")
+                    if response.status >= 400 and "favicon.ico" not in response.url
+                    else None
+                ),
             )
 
             await page.goto(url, wait_until="networkidle")
