@@ -59,16 +59,6 @@ const minitest = (() => {
 
     const resultHandlers = [];
 
-    const notifyResult = result => {
-        for (const handler of resultHandlers) {
-            try {
-                handler(result);
-            } catch (err) {
-                window.console.error("minitest result handler failed", err);
-            }
-        }
-    };
-
     // adapted from https://stackoverflow.com/a/53593328
     const stableStringify = obj => {
         const keys = {};
@@ -154,12 +144,14 @@ const minitest = (() => {
                     `%c[%s] passed: %d, errors: %d, total: %d`,
                     style, testName, summary.passed, summary.errors, summary.total,
                 );
-                notifyResult({
-                    name: testName,
-                    passed: summary.passed,
-                    errors: summary.errors,
-                    total: summary.total,
-                });
+                const result = { name: testName, ...summary };
+                for (const handler of resultHandlers) {
+                    try {
+                        handler(result);
+                    } catch (err) {
+                        window.console.error("minitest result handler failed", err);
+                    }
+                }
             });
         },
     });
