@@ -161,7 +161,7 @@ fn filter_applicable_comments<'a>(
     }
 
     // Sort by line number descending (insert from bottom to top)
-    applicable.sort_by(|a, b| b.0.cmp(&a.0));
+    applicable.sort_by_key(|(line_number, _)| std::cmp::Reverse(*line_number));
     applicable
 }
 

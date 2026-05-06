@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["playwright", "texc"]
+# dependencies = ["playwright==1.56.0", "texc"]
 #
 # [tool.uv.sources]
 # texc = { path = "../texc", editable = true }
