@@ -794,8 +794,31 @@ mod cli_end_to_end {
         let client = MockGitHubClient::new("testuser");
         let repository = MockRepository::new("owner", "repo", "origin/main");
         let cmd = ReviewFormatCommand {
-            local: true,
-            comments_file: Some(temp_file.path().to_path_buf()),
+            review_or_file: Some(temp_file.path().to_path_buf()),
+            ..ReviewFormatCommand::default()
+        };
+
+        let mut output = Vec::new();
+        cmd.run(&client, &repository, &mut output).unwrap();
+
+        let output_str = String::from_utf8(output).unwrap();
+        assert_snapshot!(output_str);
+    }
+
+    #[test]
+    fn test_review_format_command_treats_non_existing_positional_as_review_id() {
+        let client = MockGitHubClient::new("testuser").with_comments(
+            "review-123",
+            [create_test_comment(
+                "src/lib.rs",
+                Some(10),
+                "Positional review id comment",
+                "reviewer",
+            )],
+        );
+        let repository = MockRepository::new("owner", "repo", "origin/main");
+        let cmd = ReviewFormatCommand {
+            review_or_file: Some("review-123".into()),
             ..ReviewFormatCommand::default()
         };
 

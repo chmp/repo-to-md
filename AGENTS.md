@@ -168,15 +168,18 @@ The server can be stopped by:
 - Pressing Ctrl-C in the terminal
 - Clicking the "Stop Server" button in the web UI
 
-On shutdown, the server prints the `review format --local` command to run next.
+On shutdown, the server prints the `review format` command to run next.
 
 Format comments as markdown:
 
 ```bash
-cargo run -- review format --local                  # Format default file to stdout
 cargo run -- review format review-comments.json     # Format specific file to stdout
 cargo run -- review format -o out.md                # Format to file
 ```
+
+When the positional argument names an existing path, `review format` treats it as
+a local comments file. Otherwise it is treated as a GitHub review ID or review
+index.
 
 ### Install skill
 

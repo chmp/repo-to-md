@@ -155,10 +155,12 @@ For all available options, run `repo-to-md review local --help`.
 The comments from a local review session can be exported to markdown by running:
 
 ```bash
-repo-to-md review format --local
+repo-to-md review format review-comments.json
 ```
 
-To customize the review comments or the output to a file use
+When the positional argument names an existing path, `review format` treats it as
+a local comments file. Otherwise it is treated as a GitHub review ID or review
+index. To customize the review comments or the output to a file use
 
 ```bash
 repo-to-md review format my-review.json -o review.md

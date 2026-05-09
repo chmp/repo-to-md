@@ -62,9 +62,9 @@ pub struct ReviewFormatCommand {
     #[argh(switch)]
     pub local: bool,
 
-    /// path to local comments JSON file (default in local mode: review-comments.json)
+    /// github review ID/index or existing local comments JSON file
     #[argh(positional)]
-    pub comments_file: Option<PathBuf>,
+    pub review_or_file: Option<PathBuf>,
 
     /// output file for local review formatting (default: stdout)
     #[argh(option, short = 'o')]
@@ -91,7 +91,7 @@ impl ReviewCommand {
 
     pub fn requires_gh(&self) -> bool {
         match &self.command {
-            ReviewSubcommand::Format(cmd) => !cmd.is_local_format_requested(),
+            ReviewSubcommand::Format(cmd) => !cmd.should_format_local_review(),
             ReviewSubcommand::Local(_) => false,
         }
     }
@@ -99,7 +99,7 @@ impl ReviewCommand {
     pub fn requires_git(&self) -> bool {
         match &self.command {
             ReviewSubcommand::Format(cmd) => {
-                !cmd.is_local_format_requested() && (cmd.repo.is_none() || cmd.apply)
+                !cmd.should_format_local_review() && (cmd.repo.is_none() || cmd.apply)
             }
             ReviewSubcommand::Local(_) => false,
         }
@@ -119,19 +119,21 @@ impl ReviewFormatCommand {
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch + CheckWorkingDirectory + GetRepoRoot),
         writer: &mut impl Write,
     ) -> Result<()> {
-        if self.is_local_format_requested() {
+        if self.should_format_local_review() {
             return self.run_local_format(writer);
         }
 
+        let self_ = self.with_positional_review_id()?;
+
         // Safety check for apply mode
-        if self.apply && !self.force && repository.has_uncommitted_changes()? {
+        if self_.apply && !self_.force && repository.has_uncommitted_changes()? {
             bail!(
                 "You have uncommitted changes. Commit or stash them first, \
                  or use --force to apply anyway."
             );
         }
 
-        let review_id = self.get_review_id(client, repository)?;
+        let review_id = self_.get_review_id(client, repository)?;
         let comments = client.fetch_review_comments(&review_id)?;
 
         if comments.is_empty() {
@@ -141,7 +143,7 @@ impl ReviewFormatCommand {
 
         let grouped_comments = group_comments_by_file(comments);
 
-        if self.apply {
+        if self_.apply {
             let repo_root = repository.get_repo_root()?;
             let result = apply_comments_to_files(grouped_comments, &repo_root)?;
             print_apply_result(&result, writer)?;
@@ -152,8 +154,14 @@ impl ReviewFormatCommand {
         Ok(())
     }
 
-    fn is_local_format_requested(&self) -> bool {
-        self.local || self.comments_file.is_some() || self.output.is_some()
+    fn should_format_local_review(&self) -> bool {
+        self.local || self.output.is_some() || self.positional_file_exists()
+    }
+
+    fn positional_file_exists(&self) -> bool {
+        self.review_or_file
+            .as_ref()
+            .is_some_and(|path| path.exists())
     }
 
     fn run_local_format(self, writer: &mut impl Write) -> Result<()> {
@@ -161,7 +169,7 @@ impl ReviewFormatCommand {
 
         let cmd = LocalFormatCommand {
             comments_file: self
-                .comments_file
+                .review_or_file
                 .unwrap_or_else(|| PathBuf::from("review-comments.json")),
             output: self.output,
         };
@@ -182,6 +190,18 @@ impl ReviewFormatCommand {
         }
 
         Ok(())
+    }
+
+    fn with_positional_review_id(mut self) -> Result<Self> {
+        if let Some(review_or_file) = self.review_or_file.take() {
+            if self.review.is_some() {
+                bail!("Cannot pass both a positional review ID/index and --review");
+            }
+
+            self.review = Some(review_or_file.to_string_lossy().into_owned());
+        }
+
+        Ok(self)
     }
 
     fn get_review_id(

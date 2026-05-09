@@ -11,7 +11,7 @@ markdown.
 ## Primary usage
 
 ```bash
-repo-to-md review format --local
+repo-to-md review format review-comments.json
 ```
 
 This reads `review-comments.json` from the current directory and outputs
@@ -29,6 +29,9 @@ Specify a different comments file:
 ```bash
 repo-to-md review format path/to/comments.json
 ```
+
+The comments argument must point to an existing file. Otherwise `review format`
+interprets the positional argument as a GitHub review ID or review index.
 
 Output to a file instead of stdout:
 
