@@ -127,8 +127,8 @@ repo-to-md review format --apply --force      # Skip uncommitted changes check
 Fetch and format a GitHub issue:
 
 ```bash
-repo-to-md issue 42
-repo-to-md issue 42 --repo owner/repo
+repo-to-md issue format 42
+repo-to-md issue format 42 --repo owner/repo
 ```
 
 The repository is auto-detected from the `origin` remote when not specified.

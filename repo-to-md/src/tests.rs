@@ -481,7 +481,7 @@ mod integration {
 #[cfg(test)]
 mod cli_end_to_end {
     use crate::{
-        cli::{IssueCommand, ReviewFormatCommand},
+        cli::{IssueFormatCommand, ReviewFormatCommand},
         client::{
             Comment, CommentCount, FetchReviewCommentsClient, Issue, MockGitHubClient, PullRequest,
             Review, User,
@@ -522,7 +522,7 @@ mod cli_end_to_end {
         }
     }
 
-    impl IssueCommand {
+    impl IssueFormatCommand {
         fn with_issue_number(mut self, number: u32) -> Self {
             self.issue_number = number;
             self
@@ -846,7 +846,7 @@ mod cli_end_to_end {
         let client = MockGitHubClient::new("testuser").with_issue("owner", "repo", issue);
         let repository = MockRepository::new("owner", "repo", "origin/main");
 
-        let cmd = IssueCommand::default()
+        let cmd = IssueFormatCommand::default()
             .with_issue_number(42)
             .with_repo("owner/repo");
 
@@ -874,7 +874,7 @@ mod cli_end_to_end {
         let client = MockGitHubClient::new("testuser").with_issue("auto-owner", "auto-repo", issue);
         let repository = MockRepository::new("auto-owner", "auto-repo", "origin/main");
 
-        let cmd = IssueCommand::default().with_issue_number(99);
+        let cmd = IssueFormatCommand::default().with_issue_number(99);
 
         let mut output = Vec::new();
         cmd.run(&client, &repository, &mut output).unwrap();

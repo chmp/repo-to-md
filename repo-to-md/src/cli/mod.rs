@@ -9,7 +9,7 @@ mod skills_show;
 use anyhow::Result;
 use argh::FromArgs;
 
-pub use issue::IssueCommand;
+pub use issue::{IssueCommand, IssueFormatCommand};
 pub use query::QueryCommand;
 pub use review::{ReviewCommand, ReviewFormatCommand};
 pub use skills::Skills;
@@ -47,7 +47,7 @@ impl Cli {
             }
             Command::Issue(cmd) => {
                 check_executable("gh")?;
-                if cmd.repo.is_none() {
+                if cmd.requires_git() {
                     check_executable("git")?;
                 }
                 cmd.run(&GithubClient, &LocalRepository, &mut stdout)

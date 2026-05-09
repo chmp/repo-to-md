@@ -134,8 +134,8 @@ in the working directory. Use `--force` to bypass this check.
 Fetch issues:
 
 ```bash
-cargo run -- issue <ISSUE_NUMBER>
-cargo run -- issue <ISSUE_NUMBER> --repo <OWNER/REPO>
+cargo run -- issue format <ISSUE_NUMBER>
+cargo run -- issue format <ISSUE_NUMBER> --repo <OWNER/REPO>
 ```
 
 Review local changes with web UI:

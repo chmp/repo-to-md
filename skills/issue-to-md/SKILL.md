@@ -11,13 +11,13 @@ LLM-friendly markdown.
 ## Primary usage
 
 ```bash
-repo-to-md issue ISSUE_NUMBER
+repo-to-md issue format ISSUE_NUMBER
 ```
 
 For example, to get issue #42 from the current repository, run
 
 ```bash
-repo-to-md issue 42
+repo-to-md issue format 42
 ```
 
 ## Prerequisites
@@ -33,7 +33,7 @@ Examples:
 
 ```bash
 # Fetch issue from a specific repository
-repo-to-md issue 123 --repo anthropics/claude-code
+repo-to-md issue format 123 --repo anthropics/claude-code
 ```
 
 ## Output format

@@ -7,10 +7,24 @@ use crate::{
     client::FetchIssueClient, formatting::write_issue_as_markdown, repository::GetRepoistoryInfo,
 };
 
-#[derive(FromArgs, Default)]
+/// Commands for GitHub issues
+#[derive(FromArgs)]
 #[argh(subcommand, name = "issue")]
-/// Fetch and format GitHub issue as markdown
 pub struct IssueCommand {
+    #[argh(subcommand)]
+    pub command: IssueSubcommand,
+}
+
+#[derive(FromArgs)]
+#[argh(subcommand)]
+pub enum IssueSubcommand {
+    Format(IssueFormatCommand),
+}
+
+#[derive(FromArgs, Default)]
+#[argh(subcommand, name = "format")]
+/// Fetch and format GitHub issue as markdown
+pub struct IssueFormatCommand {
     /// issue number to fetch
     #[argh(positional)]
     pub issue_number: u32,
@@ -21,6 +35,25 @@ pub struct IssueCommand {
 }
 
 impl IssueCommand {
+    pub fn run(
+        self,
+        client: &impl FetchIssueClient,
+        repository: &impl GetRepoistoryInfo,
+        writer: &mut impl Write,
+    ) -> Result<()> {
+        match self.command {
+            IssueSubcommand::Format(cmd) => cmd.run(client, repository, writer),
+        }
+    }
+
+    pub fn requires_git(&self) -> bool {
+        match &self.command {
+            IssueSubcommand::Format(cmd) => cmd.repo.is_none(),
+        }
+    }
+}
+
+impl IssueFormatCommand {
     pub fn run(
         self,
         client: &impl FetchIssueClient,
