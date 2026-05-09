@@ -1,12 +1,10 @@
-# `repo-to-md`
+# `repo-to-md` - Markdown based Git workflows
 
-Format GitHub pull request reviews and issues as markdown for LLM consumption.
-
-`repo-to-md` fetches PR review comments and issues from GitHub using the `gh`
-CLI and formats them as markdown. Review comments are rendered as code blocks
-with inline comments, while issues include their description and conversation
-thread. This makes it easy to provide GitHub context to LLMs for addressing
-feedback or implementing features.
+`repo-to-md` allows agents to interact with reviews and issues. It supports
+GitHub pull-request reviews and issues, as well as local reviews via a custom
+web interface. It renders the content to Markdown designed for LLM consumption.
+`repo-to-md` ships embedded skills to allow to easily integrate it into agentic
+workflows. `repo-to-md` interacts with GitHub using the `gh` CLI.
 
 ## Installation
 
@@ -47,20 +45,19 @@ repo-to-md review 78 --owner chmp --repo repo-to-md
 ### AI Agent Skills
 
 This tool includes skills that enable natural language interaction with GitHub
-reviews and issues. The skills follow the [AgentSkills specification](https://agentskills.io/)
-and can be used by any compatible AI agent.
+reviews and issues. The skills follow the
+[AgentSkills specification](https://agentskills.io/) and can be used by any
+compatible AI agent.
 
-**review-to-md** fetches and formats PR review comments. AI agents can use
-this skill when addressing review feedback. Example prompts that
-trigger this skill:
+**review-to-md** fetches and formats PR review comments. AI agents can use this
+skill when addressing review feedback. Example prompts that trigger this skill:
 
 - "Please address my last review on GitHub"
 - "Implement the feedback from my PR review"
 - "Fix the issues mentioned in the code review"
 
-**issue-to-md** fetches and formats GitHub issues. AI agents can use this
-skill when working on issues. Example prompts that trigger this
-skill:
+**issue-to-md** fetches and formats GitHub issues. AI agents can use this skill
+when working on issues. Example prompts that trigger this skill:
 
 - "Please implement issue 67"
 - "What does GitHub issue #42 say?"
@@ -84,8 +81,8 @@ Skills are installed to `~/.agents/skills/review-to-md/` (global) or
 
 ### Review selection options
 
-The default behavior auto-detects the PR from the current branch and selects
-the last review. Use flags to override:
+The default behavior auto-detects the PR from the current branch and selects the
+last review. Use flags to override:
 
 ```bash
 repo-to-md review --pr 78                      # Specific PR
