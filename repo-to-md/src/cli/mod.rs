@@ -1,17 +1,19 @@
-mod install_skill;
 mod issue;
 mod local;
 mod query;
 pub(crate) mod review;
+mod skills;
+mod skills_install;
+mod skills_show;
 
 use anyhow::Result;
 use argh::FromArgs;
 
-pub use install_skill::InstallSkillCommand;
 pub use issue::IssueCommand;
 pub use local::LocalCommand;
 pub use query::QueryCommand;
 pub use review::ReviewCommand;
+pub use skills::Skills;
 
 use crate::{client::GithubClient, executable::check_executable, repository::LocalRepository};
 
@@ -27,9 +29,9 @@ pub struct Cli {
 pub enum Command {
     Review(ReviewCommand),
     Issue(IssueCommand),
-    InstallSkill(InstallSkillCommand),
     Query(QueryCommand),
     Local(LocalCommand),
+    Skills(Skills),
 }
 
 impl Cli {
@@ -50,12 +52,12 @@ impl Cli {
                 }
                 cmd.run(&GithubClient, &LocalRepository, &mut stdout)
             }
-            Command::InstallSkill(cmd) => cmd.run(),
+            Command::Local(cmd) => cmd.run(),
             Command::Query(cmd) => {
                 check_executable("gh")?;
                 cmd.run(&GithubClient)
             }
-            Command::Local(cmd) => cmd.run(),
+            Command::Skills(cmd) => cmd.run(),
         }
     }
 }

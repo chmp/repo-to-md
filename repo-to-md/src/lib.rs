@@ -11,3 +11,4 @@ pub mod language;
 pub mod local;
 pub mod repository;
 pub mod side_by_side_diff;
+pub mod skills;
