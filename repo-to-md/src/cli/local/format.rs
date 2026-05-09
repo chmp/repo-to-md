@@ -1,28 +1,20 @@
 use std::fs::File;
-use std::io::{self, BufWriter, Write};
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use argh::FromArgs;
 
 use crate::formatting::{group_comments_by_file, write_comments_as_markdown};
 use crate::local::CommentsFile;
 use crate::side_by_side_diff::SideBySideDiff;
 
 /// Format local review comments as markdown for LLM consumption
-#[derive(FromArgs)]
-#[argh(subcommand, name = "format")]
-pub struct FormatCommand {
-    /// path to comments JSON file (default: review-comments.json)
-    #[argh(positional, default = "PathBuf::from(\"review-comments.json\")")]
+pub struct LocalFormatCommand {
     pub comments_file: PathBuf,
-
-    /// output file (default: stdout)
-    #[argh(option, short = 'o')]
     pub output: Option<PathBuf>,
 }
 
-impl std::default::Default for FormatCommand {
+impl std::default::Default for LocalFormatCommand {
     fn default() -> Self {
         Self {
             comments_file: PathBuf::from("review-comments.json"),
@@ -31,10 +23,10 @@ impl std::default::Default for FormatCommand {
     }
 }
 
-impl FormatCommand {
-    pub fn run(self) -> Result<()> {
+impl LocalFormatCommand {
+    pub fn run_with_writer(self, writer: &mut impl Write) -> Result<()> {
         let comments_file = CommentsFile::from_path(&self.comments_file).context(format!(
-            "Failed to open comments file: {path}. Please run `repo-to-md local review` to create one",
+            "Failed to open comments file: {path}. Please run `repo-to-md review local` to create one",
             path = self.comments_file.display(),
         ))?;
 
@@ -80,8 +72,7 @@ impl FormatCommand {
                 eprintln!("Exported comments to {path}", path = path.display());
             }
             None => {
-                let mut stdout = io::stdout();
-                write_comments_as_markdown(&mut stdout, grouped_comments)?;
+                write_comments_as_markdown(writer, grouped_comments)?;
             }
         }
 
@@ -134,12 +125,13 @@ mod tests {
             .unwrap();
         temp_file.flush().unwrap();
 
-        let cmd = FormatCommand {
+        let cmd = LocalFormatCommand {
             comments_file: temp_file.path().to_path_buf(),
             output: None,
         };
 
-        let result = cmd.run();
+        let mut output = Vec::new();
+        let result = cmd.run_with_writer(&mut output);
         assert!(result.is_ok());
     }
 
@@ -183,12 +175,13 @@ mod tests {
             .unwrap();
         temp_file.flush().unwrap();
 
-        let cmd = FormatCommand {
+        let cmd = LocalFormatCommand {
             comments_file: temp_file.path().to_path_buf(),
             output: None,
         };
 
-        let result = cmd.run();
+        let mut output = Vec::new();
+        let result = cmd.run_with_writer(&mut output);
         // Should succeed with no output since all comments are minimized
         assert!(result.is_ok());
     }

@@ -13,7 +13,7 @@ LLM-friendly markdown.
 Get the last review in GitHub by the current user for an open Pull Request for the current branch in the git repository
 
 ```bash
-repo-to-md review --author @me
+repo-to-md review format --author @me
 ```
 
 The command can be executed anywhere in the repository. There is no need to
@@ -43,10 +43,10 @@ Examples:
 
 ```bash
 # select the review for the current branch in the repo chmp/repo-to-md
-repo-to-md review --repo chmp/repo-to-md
+repo-to-md review format --repo chmp/repo-to-md
 
 # selecth the pull request number 6
-repo-to-md review --pr 6
+repo-to-md review format --pr 6
 ```
 
 ## Output format

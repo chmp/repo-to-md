@@ -11,7 +11,7 @@ markdown.
 ## Primary usage
 
 ```bash
-repo-to-md local format
+repo-to-md review format --local
 ```
 
 This reads `review-comments.json` from the current directory and outputs
@@ -19,7 +19,7 @@ markdown to stdout.
 
 ## Prerequisites
 
-- A `review-comments.json` file must exist (created by `repo-to-md local review`)
+- A `review-comments.json` file must exist (created by `repo-to-md review local`)
 - The file contains comments from a local review session
 
 ## Alternative usage
@@ -27,13 +27,13 @@ markdown to stdout.
 Specify a different comments file:
 
 ```bash
-repo-to-md local format path/to/comments.json
+repo-to-md review format path/to/comments.json
 ```
 
 Output to a file instead of stdout:
 
 ```bash
-repo-to-md local format -o output.md
+repo-to-md review format -o output.md
 ```
 
 ## Output format

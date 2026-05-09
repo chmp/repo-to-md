@@ -1,10 +1,12 @@
 use std::io::Write;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use argh::FromArgs;
 
 use crate::{
     apply::{apply_comments_to_files, print_apply_result},
+    cli::local::{LocalCommand, LocalFormatCommand},
     client::{
         FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient, ListReviewsClient,
         Review,
@@ -13,11 +15,26 @@ use crate::{
     repository::{CheckWorkingDirectory, GetCurrentBranch, GetRepoRoot, GetRepoistoryInfo},
 };
 
-#[derive(FromArgs, Default)]
+/// Commands for reviewing GitHub PR comments and local diffs
+#[derive(FromArgs)]
 #[argh(subcommand, name = "review")]
-/// Fetch and format PR review comments as markdown
 pub struct ReviewCommand {
-    /// PR number to fetch comments from (not needed if --json-file is provided)
+    #[argh(subcommand)]
+    pub command: ReviewSubcommand,
+}
+
+#[derive(FromArgs)]
+#[argh(subcommand)]
+pub enum ReviewSubcommand {
+    Format(ReviewFormatCommand),
+    Local(LocalCommand),
+}
+
+#[derive(FromArgs, Default)]
+#[argh(subcommand, name = "format")]
+/// Fetch and format PR review comments as markdown
+pub struct ReviewFormatCommand {
+    /// PR number to fetch comments from
     #[argh(option)]
     pub pr: Option<u32>,
 
@@ -25,7 +42,7 @@ pub struct ReviewCommand {
     #[argh(option)]
     pub repo: Option<String>,
 
-    /// specific the review either an ID or an index (skips interactive selection)
+    /// specific review ID or index (skips interactive selection)
     #[argh(option)]
     pub review: Option<String>,
 
@@ -40,25 +57,20 @@ pub struct ReviewCommand {
     /// skip safety check for uncommitted changes (use with --apply)
     #[argh(switch)]
     pub force: bool,
+
+    /// format a local review comments file instead of fetching GitHub review comments
+    #[argh(switch)]
+    pub local: bool,
+
+    /// path to local comments JSON file (default in local mode: review-comments.json)
+    #[argh(positional)]
+    pub comments_file: Option<PathBuf>,
+
+    /// output file for local review formatting (default: stdout)
+    #[argh(option, short = 'o')]
+    pub output: Option<PathBuf>,
 }
 
-/// Handles the review subcommand - fetches and formats PR comments.
-///
-/// # Arguments
-///
-/// * `cmd` - The review command parameters
-///
-/// # Returns
-///
-/// Ok(()) on successful execution
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Neither PR ID nor JSON file is provided
-/// - Repository info cannot be auto-detected
-/// - API calls fail
-/// - File operations fail
 impl ReviewCommand {
     pub fn run(
         self,
@@ -71,6 +83,46 @@ impl ReviewCommand {
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch + CheckWorkingDirectory + GetRepoRoot),
         writer: &mut impl Write,
     ) -> Result<()> {
+        match self.command {
+            ReviewSubcommand::Format(cmd) => cmd.run(client, repository, writer),
+            ReviewSubcommand::Local(cmd) => cmd.run(),
+        }
+    }
+
+    pub fn requires_gh(&self) -> bool {
+        match &self.command {
+            ReviewSubcommand::Format(cmd) => !cmd.is_local_format_requested(),
+            ReviewSubcommand::Local(_) => false,
+        }
+    }
+
+    pub fn requires_git(&self) -> bool {
+        match &self.command {
+            ReviewSubcommand::Format(cmd) => {
+                !cmd.is_local_format_requested() && (cmd.repo.is_none() || cmd.apply)
+            }
+            ReviewSubcommand::Local(_) => false,
+        }
+    }
+}
+
+/// Handles the review format subcommand - fetches and formats PR comments.
+impl ReviewFormatCommand {
+    pub fn run(
+        self,
+        client: &(
+             impl GetCurrentUserClient
+             + ListReviewsClient
+             + FetchReviewCommentsClient
+             + ListPullRequestsClient
+         ),
+        repository: &(impl GetRepoistoryInfo + GetCurrentBranch + CheckWorkingDirectory + GetRepoRoot),
+        writer: &mut impl Write,
+    ) -> Result<()> {
+        if self.is_local_format_requested() {
+            return self.run_local_format(writer);
+        }
+
         // Safety check for apply mode
         if self.apply && !self.force && repository.has_uncommitted_changes()? {
             bail!(
@@ -95,6 +147,38 @@ impl ReviewCommand {
             print_apply_result(&result, writer)?;
         } else {
             write_comments_as_markdown(writer, grouped_comments)?;
+        }
+
+        Ok(())
+    }
+
+    fn is_local_format_requested(&self) -> bool {
+        self.local || self.comments_file.is_some() || self.output.is_some()
+    }
+
+    fn run_local_format(self, writer: &mut impl Write) -> Result<()> {
+        self.ensure_no_github_options_for_local_format()?;
+
+        let cmd = LocalFormatCommand {
+            comments_file: self
+                .comments_file
+                .unwrap_or_else(|| PathBuf::from("review-comments.json")),
+            output: self.output,
+        };
+        cmd.run_with_writer(writer)
+    }
+
+    fn ensure_no_github_options_for_local_format(&self) -> Result<()> {
+        if self.pr.is_some()
+            || self.repo.is_some()
+            || self.review.is_some()
+            || self.author.is_some()
+            || self.apply
+            || self.force
+        {
+            bail!(
+                "Cannot combine local review formatting with GitHub review options such as --pr, --repo, --review, --author, --apply, or --force"
+            );
         }
 
         Ok(())

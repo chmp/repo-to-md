@@ -12,8 +12,8 @@ use crate::side_by_side_diff::SideBySideDiff;
 
 /// Launch a web UI for reviewing local git diffs
 #[derive(FromArgs)]
-#[argh(subcommand, name = "review")]
-pub struct ReviewCommand {
+#[argh(subcommand, name = "local")]
+pub struct LocalCommand {
     /// base git ref to compare against (auto-detected if not provided)
     #[argh(positional)]
     pub refs: Vec<String>,
@@ -43,7 +43,7 @@ pub struct ReviewCommand {
     pub force: bool,
 }
 
-impl ReviewCommand {
+impl LocalCommand {
     pub fn run(self) -> Result<()> {
         check_executable("git")?;
 

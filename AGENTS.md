@@ -99,32 +99,32 @@ unless explicitly prompted.
 Fetch comments with interactive review selection:
 
 ```bash
-cargo run -- review --pr <PR_NUMBER>
-cargo run -- review --pr <PR_NUMBER> --repo <OWNER/REPO>
+cargo run -- review format --pr <PR_NUMBER>
+cargo run -- review format --pr <PR_NUMBER> --repo <OWNER/REPO>
 ```
 
 Fetch comments from a specific review (skip interactive selection):
 
 ```bash
-cargo run -- review --pr <PR_NUMBER> --review <REVIEW_ID>
-cargo run -- review --pr <PR_NUMBER> --review 1
-cargo run -- review --pr <PR_NUMBER> --review -1
+cargo run -- review format --pr <PR_NUMBER> --review <REVIEW_ID>
+cargo run -- review format --pr <PR_NUMBER> --review 1
+cargo run -- review format --pr <PR_NUMBER> --review -1
 ```
 
 Filter reviews by author:
 
 ```bash
-cargo run -- review --pr <PR_NUMBER> --author <USERNAME>
-cargo run -- review --pr <PR_NUMBER> --author <USERNAME> --review -1
-cargo run -- review --pr <PR_NUMBER> --author @me
-cargo run -- review --pr <PR_NUMBER> --author @me --review -1
+cargo run -- review format --pr <PR_NUMBER> --author <USERNAME>
+cargo run -- review format --pr <PR_NUMBER> --author <USERNAME> --review -1
+cargo run -- review format --pr <PR_NUMBER> --author @me
+cargo run -- review format --pr <PR_NUMBER> --author @me --review -1
 ```
 
 Apply comments directly to source files:
 
 ```bash
-cargo run -- review --pr <PR_NUMBER> --apply
-cargo run -- review --pr <PR_NUMBER> --apply --force  # Skip uncommitted changes check
+cargo run -- review format --pr <PR_NUMBER> --apply
+cargo run -- review format --pr <PR_NUMBER> --apply --force  # Skip uncommitted changes check
 ```
 
 The `--apply` flag inserts review comments directly into the source files using
@@ -141,15 +141,15 @@ cargo run -- issue <ISSUE_NUMBER> --repo <OWNER/REPO>
 Review local changes with web UI:
 
 ```bash
-cargo run -- local review                    # Auto-detect base, review commits up to HEAD
-cargo run -- local review main               # Review commits from main to HEAD
-cargo run -- local review main feature       # Review commits from main to feature
-cargo run -- local review HEAD~5 HEAD~2      # Review specific commit range
-cargo run -- local review main --no-open     # Don't open browser automatically
-cargo run -- local review --force            # Force regeneration even with uncommitted changes
+cargo run -- review local                    # Auto-detect base, review commits up to HEAD
+cargo run -- review local main               # Review commits from main to HEAD
+cargo run -- review local main feature       # Review commits from main to feature
+cargo run -- review local HEAD~5 HEAD~2      # Review specific commit range
+cargo run -- review local main --no-open     # Don't open browser automatically
+cargo run -- review local --force            # Force regeneration even with uncommitted changes
 ```
 
-The `local review` command launches a local web server with a side-by-side diff
+The `review local` command launches a local web server with a side-by-side diff
 viewer for reviewing a range of commits before merge. It takes a base ref (first
 argument) and an optional end ref (second argument, defaults to HEAD). When no
 arguments are provided, it auto-detects the base branch (trying origin/HEAD,
@@ -168,14 +168,14 @@ The server can be stopped by:
 - Pressing Ctrl-C in the terminal
 - Clicking the "Stop Server" button in the web UI
 
-On shutdown, the server prints the `local format` command to run next.
+On shutdown, the server prints the `review format --local` command to run next.
 
 Format comments as markdown:
 
 ```bash
-cargo run -- local format                           # Format default file to stdout
-cargo run -- local format review-comments.json      # Format specific file to stdout
-cargo run -- local format -o out.md                 # Format to file
+cargo run -- review format --local                  # Format default file to stdout
+cargo run -- review format review-comments.json     # Format specific file to stdout
+cargo run -- review format -o out.md                # Format to file
 ```
 
 ### Install skill
@@ -396,7 +396,7 @@ cargo test
 
 Frontend tests run in the browser using the minitest.js framework. To run them:
 
-1. Start the local server: `cargo run -- local review HEAD~1`
+1. Start the local server: `cargo run -- review local HEAD~1`
 2. Navigate to `http://localhost:PORT/test.html` (replace PORT with actual port)
 3. Open browser developer tools (F12) and check the Console tab
 4. Green = passed, Red = failed

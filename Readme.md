@@ -26,20 +26,20 @@ Prerequisites:
 To format the comments for pull request 78, use
 
 ```bash
-repo-to-md review 78
+repo-to-md review format --pr 78
 ```
 
 This commands auto-detects the repository from git remote, if it configured. To
 specify owner and repository explicitly, use:
 
 ```bash
-repo-to-md review <PR_NUMBER> --owner <OWNER> --repo <REPO>
+repo-to-md review format --pr <PR_NUMBER> --repo <OWNER/REPO>
 ```
 
 Example:
 
 ```bash
-repo-to-md review 78 --owner chmp --repo repo-to-md
+repo-to-md review format --pr 78 --repo chmp/repo-to-md
 ```
 
 ### AI Agent Skills
@@ -85,13 +85,13 @@ The default behavior auto-detects the PR from the current branch and selects the
 last review. Use flags to override:
 
 ```bash
-repo-to-md review --pr 78                      # Specific PR
-repo-to-md review --review -1                   # Last review
-repo-to-md review --author @me                  # Filter by author
-repo-to-md review --repo owner/repo             # Override repository
+repo-to-md review format --pr 78                      # Specific PR
+repo-to-md review format --review -1                   # Last review
+repo-to-md review format --author @me                  # Filter by author
+repo-to-md review format --repo owner/repo             # Override repository
 ```
 
-For all available options, run `repo-to-md review --help`.
+For all available options, run `repo-to-md review format --help`.
 
 ### Apply mode
 
@@ -99,8 +99,8 @@ Instead of outputting markdown, you can apply review comments directly to source
 files:
 
 ```bash
-repo-to-md review --apply              # Apply comments from current branch's PR
-repo-to-md review --pr 78 --apply      # Apply comments from specific PR
+repo-to-md review format --apply              # Apply comments from current branch's PR
+repo-to-md review format --pr 78 --apply      # Apply comments from specific PR
 ```
 
 This inserts comments directly into your source files using language-appropriate
@@ -119,7 +119,7 @@ By default, `--apply` refuses to run if you have uncommitted changes (to make it
 easy to revert). Use `--force` to bypass this safety check.
 
 ```bash
-repo-to-md review --apply --force      # Skip uncommitted changes check
+repo-to-md review format --apply --force      # Skip uncommitted changes check
 ```
 
 ### Fetching issues
@@ -138,9 +138,9 @@ The repository is auto-detected from the `origin` remote when not specified.
 Review local commits in a web UI before merging to the base branch:
 
 ```bash
-repo-to-md local review                    # Auto-detect base, review commits up to HEAD
-repo-to-md local review main               # Review commits from main to HEAD
-repo-to-md local review main feature       # Review commits from main to feature
+repo-to-md review local                    # Auto-detect base, review commits up to HEAD
+repo-to-md review local main               # Review commits from main to HEAD
+repo-to-md review local main feature       # Review commits from main to feature
 ```
 
 This launches a local web server with a side-by-side diff viewer where you can
@@ -150,18 +150,18 @@ and refuses to start if there are uncommitted changes when reviewing HEAD (use
 `-o` to change). The diff and commit list are also persisted, so reopening the
 session detects if commits have changed.
 
-For all available options, run `repo-to-md local review --help`.
+For all available options, run `repo-to-md review local --help`.
 
 The comments from a local review session can be exported to markdown by running:
 
 ```bash
-repo-to-md local format
+repo-to-md review format --local
 ```
 
 To customize the review comments or the output to a file use
 
 ```bash
-repo-to-md local format my-review.json -o review.md
+repo-to-md review format my-review.json -o review.md
 ```
 
 ## How it works

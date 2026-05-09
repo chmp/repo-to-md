@@ -1,0 +1,27 @@
+---
+source: repo-to-md/src/tests.rs
+assertion_line: 806
+expression: output_str
+---
+# Review comments
+
+Please address the following review comments. The comments are given as inline
+comments inside code blocks. They use the comment format of the language of the
+commented file. Each comment is wrapped in "<review>" tags.
+
+For example, a Rust file may look like:
+
+```rust
+fn main() {
+    println!("13");
+    // <review>
+    // Please use 42 as the number
+    // </review>
+}
+```
+
+```rust
+// <review>
+// Local review comment
+// </review>
+```
