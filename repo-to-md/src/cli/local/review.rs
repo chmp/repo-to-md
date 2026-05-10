@@ -10,6 +10,11 @@ use crate::local::{self, CommentsFile, RefSpec, detect_base_branch};
 use crate::repository::{CheckWorkingDirectory, LocalRepository};
 use crate::side_by_side_diff::SideBySideDiff;
 
+const DEFAULT_BIND: &str = "127.0.0.1";
+const DEFAULT_PORT: u16 = 8080;
+const BIND_ENV: &str = "REPO_TO_MD_BIND";
+const PORT_ENV: &str = "REPO_TO_MD_PORT";
+
 /// Launch a web UI for reviewing local git diffs
 #[derive(FromArgs)]
 #[argh(subcommand, name = "local")]
@@ -18,13 +23,13 @@ pub struct LocalCommand {
     #[argh(positional)]
     pub refs: Vec<String>,
 
-    /// server port (default: 8080)
-    #[argh(option, default = "8080")]
-    pub port: u16,
+    /// server port (default: 8080, env: REPO_TO_MD_PORT)
+    #[argh(option)]
+    pub port: Option<u16>,
 
-    /// network address to bind to (default: 127.0.0.1)
-    #[argh(option, default = "String::from(\"127.0.0.1\")")]
-    pub bind: String,
+    /// network address to bind to (default: 127.0.0.1, env: REPO_TO_MD_BIND)
+    #[argh(option)]
+    pub bind: Option<String>,
 
     /// JSON file path for comment persistence (default: review-comments.json)
     #[argh(
@@ -46,6 +51,8 @@ pub struct LocalCommand {
 impl LocalCommand {
     pub fn run(self) -> Result<()> {
         check_executable("git")?;
+        let bind = self.bind_address()?;
+        let port = self.port()?;
 
         let (base, end) = match self.refs.as_slice() {
             [] => (detect_base_branch()?, String::from("HEAD")),
@@ -78,7 +85,7 @@ impl LocalCommand {
             base = refspec.start_ref,
             end = refspec.end_ref
         );
-        eprintln!("  Port: {port}", port = self.port);
+        eprintln!("  Port: {port}");
         eprintln!("  Comments file: {path}", path = self.output.display());
 
         let should_open = !self.no_open;
@@ -87,8 +94,7 @@ impl LocalCommand {
             .context("Failed to create tokio runtime")?
             .block_on(async {
                 let server =
-                    local::bind_server(refspec, self.port, self.output, diff, raw_diff, &self.bind)
-                        .await?;
+                    local::bind_server(refspec, port, self.output, diff, raw_diff, &bind).await?;
 
                 if should_open {
                     open_url(server.url());
@@ -97,6 +103,34 @@ impl LocalCommand {
                 server.serve().await
             })
     }
+
+    fn bind_address(&self) -> Result<String> {
+        Ok(resolve_bind_address(
+            self.bind.as_deref(),
+            std::env::var(BIND_ENV).ok().as_deref(),
+        ))
+    }
+
+    fn port(&self) -> Result<u16> {
+        resolve_port(self.port, std::env::var(PORT_ENV).ok().as_deref())
+    }
+}
+
+fn resolve_bind_address(cli_bind: Option<&str>, env_bind: Option<&str>) -> String {
+    cli_bind.or(env_bind).unwrap_or(DEFAULT_BIND).to_string()
+}
+
+fn resolve_port(cli_port: Option<u16>, env_port: Option<&str>) -> Result<u16> {
+    if let Some(port) = cli_port {
+        return Ok(port);
+    }
+
+    let Some(port) = env_port else {
+        return Ok(DEFAULT_PORT);
+    };
+
+    port.parse::<u16>()
+        .with_context(|| format!("Failed to parse {PORT_ENV}={port:?} as a valid TCP port number"))
 }
 
 fn open_url(url: &str) {
@@ -170,4 +204,32 @@ fn validate_and_prepare_session(
     bail!(
         "Session has changed. Use --force to regenerate the session and discard existing comments.",
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bind_address_prefers_cli_then_env_then_default() {
+        assert_eq!(
+            resolve_bind_address(Some("0.0.0.0"), Some("127.0.0.2")),
+            "0.0.0.0"
+        );
+        assert_eq!(resolve_bind_address(None, Some("127.0.0.2")), "127.0.0.2");
+        assert_eq!(resolve_bind_address(None, None), DEFAULT_BIND);
+    }
+
+    #[test]
+    fn port_prefers_cli_then_env_then_default() {
+        assert_eq!(resolve_port(Some(9000), Some("9001")).unwrap(), 9000);
+        assert_eq!(resolve_port(None, Some("9001")).unwrap(), 9001);
+        assert_eq!(resolve_port(None, None).unwrap(), DEFAULT_PORT);
+    }
+
+    #[test]
+    fn port_rejects_invalid_env_value() {
+        let error = resolve_port(None, Some("not-a-port")).unwrap_err();
+        assert!(error.to_string().contains("REPO_TO_MD_PORT"));
+    }
 }

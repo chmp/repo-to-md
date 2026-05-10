@@ -157,6 +157,10 @@ and refuses to start if there are uncommitted changes when reviewing HEAD (use
 `-o` to change). The diff and commit list are also persisted, so reopening the
 session detects if commits have changed.
 
+The bind address and port default to `127.0.0.1` and `8080`. They can be set
+with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
+arguments take precedence over the environment.
+
 For all available options, run `repo-to-md review local --help`.
 
 The comments from a local review session can be exported to markdown by running:

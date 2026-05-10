@@ -172,6 +172,10 @@ Comments are saved to `review-comments.json` by default (use `-o` to change).
 Browser opens automatically by default (use `--no-open` to disable). The session
 file tracks commits so reopening detects if the branch has changed.
 
+The bind address and port default to `127.0.0.1` and `8080`. They can be set
+with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
+arguments take precedence over the environment.
+
 The server can be stopped by:
 - Pressing Ctrl-C in the terminal
 - Clicking the "Stop Server" button in the web UI
