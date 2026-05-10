@@ -10,21 +10,26 @@ use crate::local::{self, CommentsFile, RefSpec, detect_base_branch};
 use crate::repository::{CheckWorkingDirectory, LocalRepository};
 use crate::side_by_side_diff::SideBySideDiff;
 
+const DEFAULT_BIND: &str = "127.0.0.1";
+const DEFAULT_PORT: u16 = 8080;
+const BIND_ENV: &str = "REPO_TO_MD_BIND";
+const PORT_ENV: &str = "REPO_TO_MD_PORT";
+
 /// Launch a web UI for reviewing local git diffs
 #[derive(FromArgs)]
-#[argh(subcommand, name = "review")]
-pub struct ReviewCommand {
+#[argh(subcommand, name = "local")]
+pub struct ReviewLocalCommand {
     /// base git ref to compare against (auto-detected if not provided)
     #[argh(positional)]
     pub refs: Vec<String>,
 
-    /// server port (default: 8080)
-    #[argh(option, default = "8080")]
-    pub port: u16,
+    /// server port (default: 8080, env: REPO_TO_MD_PORT)
+    #[argh(option)]
+    pub port: Option<u16>,
 
-    /// network address to bind to (default: 127.0.0.1)
-    #[argh(option, default = "String::from(\"127.0.0.1\")")]
-    pub bind: String,
+    /// network address to bind to (default: 127.0.0.1, env: REPO_TO_MD_BIND)
+    #[argh(option)]
+    pub bind: Option<String>,
 
     /// JSON file path for comment persistence (default: review-comments.json)
     #[argh(
@@ -43,9 +48,10 @@ pub struct ReviewCommand {
     pub force: bool,
 }
 
-impl ReviewCommand {
+impl ReviewLocalCommand {
     pub fn run(self) -> Result<()> {
-        check_executable("git")?;
+        let bind = self.bind_address()?;
+        let port = self.port()?;
 
         let (base, end) = match self.refs.as_slice() {
             [] => (detect_base_branch()?, String::from("HEAD")),
@@ -78,7 +84,7 @@ impl ReviewCommand {
             base = refspec.start_ref,
             end = refspec.end_ref
         );
-        eprintln!("  Port: {port}", port = self.port);
+        eprintln!("  Port: {port}");
         eprintln!("  Comments file: {path}", path = self.output.display());
 
         let should_open = !self.no_open;
@@ -87,8 +93,7 @@ impl ReviewCommand {
             .context("Failed to create tokio runtime")?
             .block_on(async {
                 let server =
-                    local::bind_server(refspec, self.port, self.output, diff, raw_diff, &self.bind)
-                        .await?;
+                    local::bind_server(refspec, port, self.output, diff, raw_diff, &bind).await?;
 
                 if should_open {
                     open_url(server.url());
@@ -96,6 +101,32 @@ impl ReviewCommand {
 
                 server.serve().await
             })
+    }
+
+    pub fn check_requirements(&self) -> Result<()> {
+        check_executable("git")
+    }
+
+    fn bind_address(&self) -> Result<String> {
+        Ok(self
+            .bind
+            .clone()
+            .or_else(|| std::env::var(BIND_ENV).ok())
+            .unwrap_or_else(|| DEFAULT_BIND.to_string()))
+    }
+
+    fn port(&self) -> Result<u16> {
+        if let Some(port) = self.port {
+            return Ok(port);
+        }
+
+        let Some(port) = std::env::var(PORT_ENV).ok() else {
+            return Ok(DEFAULT_PORT);
+        };
+
+        port.parse::<u16>().with_context(|| {
+            format!("Failed to parse {PORT_ENV}={port:?} as a valid TCP port number")
+        })
     }
 }
 
@@ -170,4 +201,84 @@ fn validate_and_prepare_session(
     bail!(
         "Session has changed. Use --force to regenerate the session and discard existing comments.",
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn bind_address_prefers_cli() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(BIND_ENV, Some("127.0.0.2"));
+        let command = ReviewLocalCommand {
+            bind: Some("0.0.0.0".to_string()),
+            ..test_command()
+        };
+
+        assert_eq!(command.bind_address().unwrap(), "0.0.0.0");
+        set_env(BIND_ENV, None);
+    }
+
+    #[test]
+    fn bind_address_uses_env_then_default() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(BIND_ENV, Some("127.0.0.2"));
+        assert_eq!(test_command().bind_address().unwrap(), "127.0.0.2");
+        set_env(BIND_ENV, None);
+        assert_eq!(test_command().bind_address().unwrap(), DEFAULT_BIND);
+    }
+
+    #[test]
+    fn port_prefers_cli() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(PORT_ENV, Some("9001"));
+        let command = ReviewLocalCommand {
+            port: Some(9000),
+            ..test_command()
+        };
+
+        assert_eq!(command.port().unwrap(), 9000);
+        set_env(PORT_ENV, None);
+    }
+
+    #[test]
+    fn port_uses_env_then_default() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(PORT_ENV, Some("9001"));
+        assert_eq!(test_command().port().unwrap(), 9001);
+        set_env(PORT_ENV, None);
+        assert_eq!(test_command().port().unwrap(), DEFAULT_PORT);
+    }
+
+    #[test]
+    fn port_rejects_invalid_env_value() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(PORT_ENV, Some("not-a-port"));
+        let error = test_command().port().unwrap_err();
+        assert!(error.to_string().contains("REPO_TO_MD_PORT"));
+        set_env(PORT_ENV, None);
+    }
+
+    fn test_command() -> ReviewLocalCommand {
+        ReviewLocalCommand {
+            refs: Vec::new(),
+            port: None,
+            bind: None,
+            output: PathBuf::from("review-comments.json"),
+            no_open: false,
+            force: false,
+        }
+    }
+
+    fn set_env(key: &str, value: Option<&str>) {
+        match value {
+            Some(value) => unsafe { std::env::set_var(key, value) },
+            None => unsafe { std::env::remove_var(key) },
+        }
+    }
 }

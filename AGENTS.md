@@ -99,57 +99,54 @@ unless explicitly prompted.
 Fetch comments with interactive review selection:
 
 ```bash
-cargo run -- review --pr <PR_NUMBER>
-cargo run -- review --pr <PR_NUMBER> --repo <OWNER/REPO>
+cargo run -- review format
+cargo run -- review format --repo <OWNER/REPO>
 ```
+
+The `format` subcommand may be omitted when the first argument is not a known
+review subcommand, so `cargo run -- review <PR_NUMBER>` is accepted as shorthand
+for `cargo run -- review format <PR_NUMBER>`.
 
 Fetch comments from a specific review (skip interactive selection):
 
 ```bash
-cargo run -- review --pr <PR_NUMBER> --review <REVIEW_ID>
-cargo run -- review --pr <PR_NUMBER> --review 1
-cargo run -- review --pr <PR_NUMBER> --review -1
+cargo run -- review format <PR_NUMBER> --review <REVIEW_ID>
+cargo run -- review format <PR_NUMBER> --review 1
+cargo run -- review format <PR_NUMBER> --review -1
 ```
 
 Filter reviews by author:
 
 ```bash
-cargo run -- review --pr <PR_NUMBER> --author <USERNAME>
-cargo run -- review --pr <PR_NUMBER> --author <USERNAME> --review -1
-cargo run -- review --pr <PR_NUMBER> --author @me
-cargo run -- review --pr <PR_NUMBER> --author @me --review -1
+cargo run -- review format --author <USERNAME>
+cargo run -- review format <PR_NUMBER> --author <USERNAME> --review -1
+cargo run -- review format --author @me
+cargo run -- review format <PR_NUMBER> --author @me --review -1
 ```
-
-Apply comments directly to source files:
-
-```bash
-cargo run -- review --pr <PR_NUMBER> --apply
-cargo run -- review --pr <PR_NUMBER> --apply --force  # Skip uncommitted changes check
-```
-
-The `--apply` flag inserts review comments directly into the source files using
-`<review>` tags. By default, it refuses to run if there are uncommitted changes
-in the working directory. Use `--force` to bypass this check.
 
 Fetch issues:
 
 ```bash
-cargo run -- issue <ISSUE_NUMBER>
-cargo run -- issue <ISSUE_NUMBER> --repo <OWNER/REPO>
+cargo run -- issue format <ISSUE_NUMBER>
+cargo run -- issue format <ISSUE_NUMBER> --repo <OWNER/REPO>
 ```
+
+The `format` subcommand may be omitted when the first argument is not a known
+issue subcommand, so `cargo run -- issue <ISSUE_NUMBER>` is accepted as shorthand
+for `cargo run -- issue format <ISSUE_NUMBER>`.
 
 Review local changes with web UI:
 
 ```bash
-cargo run -- local review                    # Auto-detect base, review commits up to HEAD
-cargo run -- local review main               # Review commits from main to HEAD
-cargo run -- local review main feature       # Review commits from main to feature
-cargo run -- local review HEAD~5 HEAD~2      # Review specific commit range
-cargo run -- local review main --no-open     # Don't open browser automatically
-cargo run -- local review --force            # Force regeneration even with uncommitted changes
+cargo run -- review local                    # Auto-detect base, review commits up to HEAD
+cargo run -- review local main               # Review commits from main to HEAD
+cargo run -- review local main feature       # Review commits from main to feature
+cargo run -- review local HEAD~5 HEAD~2      # Review specific commit range
+cargo run -- review local main --no-open     # Don't open browser automatically
+cargo run -- review local --force            # Force regeneration even with uncommitted changes
 ```
 
-The `local review` command launches a local web server with a side-by-side diff
+The `review local` command launches a local web server with a side-by-side diff
 viewer for reviewing a range of commits before merge. It takes a base ref (first
 argument) and an optional end ref (second argument, defaults to HEAD). When no
 arguments are provided, it auto-detects the base branch (trying origin/HEAD,
@@ -164,19 +161,25 @@ Comments are saved to `review-comments.json` by default (use `-o` to change).
 Browser opens automatically by default (use `--no-open` to disable). The session
 file tracks commits so reopening detects if the branch has changed.
 
+The bind address and port default to `127.0.0.1` and `8080`. They can be set
+with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
+arguments take precedence over the environment.
+
 The server can be stopped by:
 - Pressing Ctrl-C in the terminal
 - Clicking the "Stop Server" button in the web UI
 
-On shutdown, the server prints the `local format` command to run next.
+On shutdown, the server prints the `review format` command to run next.
 
 Format comments as markdown:
 
 ```bash
-cargo run -- local format                           # Format default file to stdout
-cargo run -- local format review-comments.json      # Format specific file to stdout
-cargo run -- local format -o out.md                 # Format to file
+cargo run -- review format review-comments.json     # Format specific file to stdout
 ```
+
+When the positional argument names an existing path, `review format` treats it as
+a local comments file. Otherwise it is treated as a GitHub review ID or review
+index.
 
 ### Install skill
 
@@ -231,8 +234,11 @@ repo-to-md/src/
 ├── main.rs             - CLI entry point
 ├── cli/                - CLI command implementations
 │   ├── mod.rs          - CLI struct, command dispatch
-│   ├── review.rs       - Review command (fetch PR review comments)
-│   ├── issue.rs        - Issue command (fetch GitHub issues)
+│   ├── review.rs       - Review supercommand
+│   ├── review_format.rs - Format remote and local review comments
+│   ├── review_local.rs - Local review web UI command
+│   ├── issue.rs        - Issue supercommand
+│   ├── issue_format.rs - Format GitHub issues
 │   ├── install_skill.rs - Skill installation command
 │   └── query.rs        - Query command
 ├── client/             - GitHub API client
@@ -269,8 +275,11 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
 
 - **main.rs** - Entry point, invokes CLI from lib
 - **cli/** - Command implementations using argh for argument parsing
-  - **review.rs** - Handles `--review`, `--author`, `--pr` options
-  - **issue.rs** - Fetches and formats GitHub issues
+  - **review.rs** - Review supercommand
+  - **review_format.rs** - Formats GitHub and local review comments
+  - **review_local.rs** - Launches the local review web UI
+  - **issue.rs** - Issue supercommand
+  - **issue_format.rs** - Fetches and formats GitHub issues
 - **client/** - GitHub API abstraction with trait-based design for testability
   - **github.rs** - Real implementation using `gh` CLI
   - **mock.rs** - MockGitHubClient for testing
@@ -304,7 +313,7 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
    - Display review table with author, date, comment count, and description
    - User selects review by number
    - Fetch comments from selected review via GraphQL (`fetch_review_comments`)
-2. **Direct mode** (`--review-id` provided):
+2. **Direct mode** (review ID positional provided):
    - Fetch comments from specified review via GraphQL
 3. **File mode** (`--json-file` provided):
    - Read comments from local JSON file
@@ -396,7 +405,7 @@ cargo test
 
 Frontend tests run in the browser using the minitest.js framework. To run them:
 
-1. Start the local server: `cargo run -- local review HEAD~1`
+1. Start the local server: `cargo run -- review local HEAD~1`
 2. Navigate to `http://localhost:PORT/test.html` (replace PORT with actual port)
 3. Open browser developer tools (F12) and check the Console tab
 4. Green = passed, Red = failed
@@ -413,7 +422,7 @@ tests may fail due to module loading restrictions without a server).
 - `tests::integration` - Review comment formatting tests with example files
 - `tests::cli_end_to_end` - End-to-end CLI tests using MockGitHubClient and
   MockRepository. Tests the full command flow including:
-  - Review command with various options (--pr, --review, --author, @me)
+  - Review command with various options (review ID/index, --author, @me)
   - Issue command with repo auto-detection
   - PR auto-detection from current branch
 

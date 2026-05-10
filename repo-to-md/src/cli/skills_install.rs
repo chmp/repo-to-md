@@ -3,10 +3,10 @@ use argh::FromArgs;
 
 use crate::skills::SKILLS;
 
+/// Install the skills
 #[derive(FromArgs)]
 #[argh(subcommand, name = "install")]
-/// Install the repo-to-md skill for AI agents
-pub struct InstallSkillCommand {
+pub struct Install {
     /// install to local project directory (finds project root via .git or .agents)
     #[argh(switch)]
     pub local: bool,
@@ -16,33 +16,19 @@ pub struct InstallSkillCommand {
     pub path: Option<String>,
 }
 
-impl InstallSkillCommand {
-    /// Installs the skill to the appropriate directory.
-    ///
-    /// # Arguments
-    ///
-    /// * `local` - If true, installs to local project directory; otherwise installs globally
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - Home directory cannot be determined (global install)
-    /// - Project root cannot be found (local install)
-    /// - Directory creation fails
-    /// - File write fails
+impl Install {
     pub fn run(self) -> Result<()> {
         let base_dir = if let Some(custom_path) = self.path {
             std::path::PathBuf::from(custom_path)
         } else if self.local {
-            // Local project installation - find project root
             let project_root = find_project_root()?;
-            eprintln!("Found project root: {}", project_root.display());
+            eprintln!("Install into project root: {}", project_root.display());
             project_root.join(".agents/skills")
         } else {
-            // Global installation in home directory
             let home = std::env::var("HOME")
                 .or_else(|_| std::env::var("USERPROFILE"))
                 .context("Could not determine home directory")?;
+            eprintln!("Install into home directory");
             std::path::PathBuf::from(home).join(".agents/skills")
         };
 
@@ -60,26 +46,13 @@ impl InstallSkillCommand {
             installation_directories.push(skill_dir);
         }
 
-        let location = if self.local {
-            "local project"
-        } else {
-            "global"
-        };
-        eprintln!("✓ Installed skills to {} directory:", location);
-        for dir in installation_directories {
-            eprintln!("  {}", dir.display());
-        }
-
+        eprintln!("Installed skills");
         Ok(())
     }
 }
 
 /// Finds the project root by walking up from current directory
 /// until finding a .git or .agents directory.
-///
-/// # Errors
-///
-/// Returns an error if no .git or .agents directory is found in any parent directory
 fn find_project_root() -> Result<std::path::PathBuf> {
     let mut current = std::env::current_dir().context("Failed to get current directory")?;
 

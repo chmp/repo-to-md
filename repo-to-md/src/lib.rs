@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-pub mod apply;
 pub mod cli;
 pub mod client;
 pub mod diff;
@@ -11,3 +10,4 @@ pub mod language;
 pub mod local;
 pub mod repository;
 pub mod side_by_side_diff;
+pub mod skills;

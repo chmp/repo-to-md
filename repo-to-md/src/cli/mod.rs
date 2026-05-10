@@ -1,22 +1,25 @@
-mod install_skill;
 mod issue;
-mod local;
-mod query;
+mod issue_format;
 pub(crate) mod review;
+pub(crate) mod review_format;
+mod review_local;
+mod skills;
+mod skills_install;
+mod skills_show;
 
 use anyhow::Result;
 use argh::FromArgs;
 
-pub use install_skill::InstallSkillCommand;
 pub use issue::IssueCommand;
-pub use local::LocalCommand;
-pub use query::QueryCommand;
+pub use issue_format::IssueFormatCommand;
 pub use review::ReviewCommand;
+pub use review_format::ReviewFormatCommand;
+pub use skills::Skills;
 
-use crate::{client::GithubClient, executable::check_executable, repository::LocalRepository};
+use crate::{client::GithubClient, repository::LocalRepository};
 
 #[derive(FromArgs)]
-/// repo-to-md: Format GitHub PR comments as markdown
+/// repo-to-md: Format reviews and issues as markdown
 pub struct Cli {
     #[argh(subcommand)]
     pub command: Command,
@@ -27,9 +30,7 @@ pub struct Cli {
 pub enum Command {
     Review(ReviewCommand),
     Issue(IssueCommand),
-    InstallSkill(InstallSkillCommand),
-    Query(QueryCommand),
-    Local(LocalCommand),
+    Skills(Skills),
 }
 
 impl Cli {
@@ -37,25 +38,14 @@ impl Cli {
         let mut stdout = std::io::stdout();
         match self.command {
             Command::Review(cmd) => {
-                check_executable("gh")?;
-                if cmd.repo.is_none() || cmd.apply {
-                    check_executable("git")?;
-                }
+                cmd.check_requirements()?;
                 cmd.run(&GithubClient, &LocalRepository, &mut stdout)
             }
             Command::Issue(cmd) => {
-                check_executable("gh")?;
-                if cmd.repo.is_none() {
-                    check_executable("git")?;
-                }
+                cmd.check_requirements()?;
                 cmd.run(&GithubClient, &LocalRepository, &mut stdout)
             }
-            Command::InstallSkill(cmd) => cmd.run(),
-            Command::Query(cmd) => {
-                check_executable("gh")?;
-                cmd.run(&GithubClient)
-            }
-            Command::Local(cmd) => cmd.run(),
+            Command::Skills(cmd) => cmd.run(),
         }
     }
 }

@@ -1,23 +1,30 @@
 use std::io::Write;
 
-use anyhow::{Context, Result, bail};
-use argh::FromArgs;
+use anyhow::Result;
+use argh::{EarlyExit, FromArgs};
 
 use crate::{
-    client::FetchIssueClient, formatting::write_issue_as_markdown, repository::GetRepoistoryInfo,
+    cli::issue_format::IssueFormatCommand, client::FetchIssueClient, executable::check_executable,
+    repository::GetRepoistoryInfo,
 };
 
-#[derive(FromArgs, Default)]
-#[argh(subcommand, name = "issue")]
-/// Fetch and format GitHub issue as markdown
+/// Commands for GitHub issues
 pub struct IssueCommand {
-    /// issue number to fetch
-    #[argh(positional)]
-    pub issue_number: u32,
+    pub command: IssueSubcommand,
+}
 
-    /// repository in owner/repo format (auto-detected from git remote if not provided)
-    #[argh(option)]
-    pub repo: Option<String>,
+/// Commands for GitHub issues
+#[derive(FromArgs)]
+#[argh(subcommand, name = "issue")]
+struct DerivedIssueCommand {
+    #[argh(subcommand)]
+    command: IssueSubcommand,
+}
+
+#[derive(FromArgs)]
+#[argh(subcommand)]
+pub enum IssueSubcommand {
+    Format(IssueFormatCommand),
 }
 
 impl IssueCommand {
@@ -27,31 +34,79 @@ impl IssueCommand {
         repository: &impl GetRepoistoryInfo,
         writer: &mut impl Write,
     ) -> Result<()> {
-        let (owner, repo) = self.get_owner_and_repo(repository)?;
+        match self.command {
+            IssueSubcommand::Format(cmd) => cmd.run(client, repository, writer),
+        }
+    }
 
-        eprintln!(
-            "Fetching issue #{} from {}/{}...",
-            self.issue_number, owner, repo
-        );
-
-        let issue = client.fetch_issue(&owner, &repo, self.issue_number)?;
-        write_issue_as_markdown(writer, &issue)?;
+    pub fn check_requirements(&self) -> Result<()> {
+        check_executable("gh")?;
+        match &self.command {
+            IssueSubcommand::Format(cmd) if cmd.requires_git() => check_executable("git")?,
+            IssueSubcommand::Format(_) => {}
+        }
 
         Ok(())
     }
+}
 
-    fn get_owner_and_repo(&self, repository: &impl GetRepoistoryInfo) -> Result<(String, String)> {
-        if let Some(repo) = self.repo.as_ref() {
-            let Some((owner, repo)) = repo.split_once('/') else {
-                bail!("Cannot interpret {repo:?} as 'owner/repo'");
-            };
-
-            Ok((owner.to_string(), repo.to_string()))
-        } else {
-            eprintln!("Determine repository from remotes");
-            repository
-                .get_github_owner_and_repo()
-                .context("Failed to auto-detect repository. Please provide --repo")
+impl FromArgs for IssueCommand {
+    fn from_args(command_name: &[&str], args: &[&str]) -> std::result::Result<Self, EarlyExit> {
+        match args.first().copied() {
+            Some("format" | "help" | "--help") | None => {
+                DerivedIssueCommand::from_args(command_name, args).map(|cmd| Self {
+                    command: cmd.command,
+                })
+            }
+            Some(_) => {
+                let mut command_name = command_name.to_vec();
+                command_name.push("format");
+                IssueFormatCommand::from_args(&command_name, args).map(|cmd| IssueCommand {
+                    command: IssueSubcommand::Format(cmd),
+                })
+            }
         }
+    }
+
+    fn redact_arg_values(
+        command_name: &[&str],
+        args: &[&str],
+    ) -> std::result::Result<Vec<String>, EarlyExit> {
+        match args.first().copied() {
+            Some("format" | "help" | "--help") | None => {
+                DerivedIssueCommand::redact_arg_values(command_name, args)
+            }
+            Some(_) => {
+                let mut command_name = command_name.to_vec();
+                command_name.push("format");
+                IssueFormatCommand::redact_arg_values(&command_name, args)
+            }
+        }
+    }
+}
+
+impl argh::SubCommand for IssueCommand {
+    const COMMAND: &'static argh::CommandInfo = DerivedIssueCommand::COMMAND;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_issue_defaults_unknown_subcommand_to_format_argument() {
+        let cmd = IssueCommand::from_args(&["repo-to-md", "issue"], &["42"]).unwrap();
+        let IssueSubcommand::Format(format) = cmd.command;
+
+        assert_eq!(format.issue_number, 42);
+        assert_eq!(format.repo, None);
+    }
+
+    #[test]
+    fn parse_issue_keeps_known_format_subcommand() {
+        let cmd = IssueCommand::from_args(&["repo-to-md", "issue"], &["format", "42"]).unwrap();
+        let IssueSubcommand::Format(format) = cmd.command;
+
+        assert_eq!(format.issue_number, 42);
     }
 }

@@ -148,6 +148,6 @@ fn print_format_hint(comments_file: &std::path::Path) {
     eprintln!();
     eprintln!("To format your review comments as markdown, run:");
     eprintln!();
-    eprintln!("  repo-to-md local format {}", comments_file.display());
+    eprintln!("  repo-to-md review format {}", comments_file.display());
     eprintln!();
 }

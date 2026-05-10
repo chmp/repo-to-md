@@ -1,7 +1,7 @@
 ---
 source: repo-to-md/src/tests.rs
+assertion_line: 829
 expression: output_str
-snapshot_kind: text
 ---
 # Review comments
 
@@ -27,7 +27,7 @@ fn main() {
     println!("Hello");
     let x = 42;
     // <review>
-    // This should return a Result instead
+    // Positional PR review comment
     // </review>
 }
 ```

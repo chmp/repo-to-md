@@ -13,7 +13,7 @@ LLM-friendly markdown.
 Get the last review in GitHub by the current user for an open Pull Request for the current branch in the git repository
 
 ```bash
-repo-to-md review --author @me
+repo-to-md review format --author @me
 ```
 
 The command can be executed anywhere in the repository. There is no need to
@@ -35,18 +35,21 @@ current user from the authentication used for the `gh` command.
 The command has many options
 
 - `--author <USERNAME>` to filter the reviews by author
-- `--pr-number <PR NUMBER>` to select a specific PR by number
 - `--repo <REPOSTITORY>` to select the repository as `owner/repo`
+- `<PR NUMBER>` to select a specific PR by number
 - `--review <INDEX OR ID>` to select a specific review
 
 Examples:
 
 ```bash
 # select the review for the current branch in the repo chmp/repo-to-md
-repo-to-md review --repo chmp/repo-to-md
+repo-to-md review format --repo chmp/repo-to-md
 
-# selecth the pull request number 6
-repo-to-md review --pr 6
+# select the last review for the current branch
+repo-to-md review format
+
+# select the second review on PR 6
+repo-to-md review format 6 --review 2
 ```
 
 ## Output format
