@@ -104,24 +104,24 @@ cargo run -- review format --repo <OWNER/REPO>
 ```
 
 The `format` subcommand may be omitted when the first argument is not a known
-review subcommand, so `cargo run -- review <REVIEW_ID>` is accepted as shorthand
-for `cargo run -- review format <REVIEW_ID>`.
+review subcommand, so `cargo run -- review <PR_NUMBER>` is accepted as shorthand
+for `cargo run -- review format <PR_NUMBER>`.
 
 Fetch comments from a specific review (skip interactive selection):
 
 ```bash
-cargo run -- review format <REVIEW_ID>
-cargo run -- review format 1
-cargo run -- review format
+cargo run -- review format <PR_NUMBER> --review <REVIEW_ID>
+cargo run -- review format <PR_NUMBER> --review 1
+cargo run -- review format <PR_NUMBER> --review -1
 ```
 
 Filter reviews by author:
 
 ```bash
 cargo run -- review format --author <USERNAME>
-cargo run -- review format --author <USERNAME>
+cargo run -- review format <PR_NUMBER> --author <USERNAME> --review -1
 cargo run -- review format --author @me
-cargo run -- review format --author @me
+cargo run -- review format <PR_NUMBER> --author @me --review -1
 ```
 
 Fetch issues:

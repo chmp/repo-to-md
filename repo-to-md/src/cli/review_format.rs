@@ -20,13 +20,17 @@ use crate::{
 #[derive(FromArgs, Default)]
 #[argh(subcommand, name = "format")]
 pub struct ReviewFormatCommand {
-    /// review ID/index or existing local comments JSON file
+    /// PR number or existing local comments JSON file
     #[argh(positional)]
-    pub review_or_file: Option<PathBuf>,
+    pub pr_or_file: Option<PathBuf>,
 
     /// repository name (auto-detected from git remote if not provided)
     #[argh(option)]
     pub repo: Option<String>,
+
+    /// specific review ID or index (defaults to the last review)
+    #[argh(option)]
+    pub review: Option<String>,
 
     /// filter reviews by author login (use "@me" for your own reviews)
     #[argh(option)]
@@ -77,7 +81,12 @@ impl ReviewFormatCommand {
     }
 
     pub fn requires_git(&self) -> bool {
-        !self.should_format_local_review() && self.repo.is_none()
+        !self.should_format_local_review()
+            && self.repo.is_none()
+            && !matches!(
+                self.review.as_deref().map(parse_review_id_or_index),
+                Some(ReviewIdOrIndex::Id(_))
+            )
     }
 
     fn should_format_local_review(&self) -> bool {
@@ -85,24 +94,22 @@ impl ReviewFormatCommand {
     }
 
     fn positional_file_exists(&self) -> bool {
-        self.review_or_file
-            .as_ref()
-            .is_some_and(|path| path.exists())
+        self.pr_or_file.as_ref().is_some_and(|path| path.exists())
     }
 
     fn run_local_format(self, writer: &mut impl Write) -> Result<()> {
         self.ensure_no_remote_options_for_local_format()?;
 
         let comments_file = self
-            .review_or_file
+            .pr_or_file
             .unwrap_or_else(|| PathBuf::from("review-comments.json"));
         write_local_comments_as_markdown(comments_file, self.output, writer)
     }
 
     fn ensure_no_remote_options_for_local_format(&self) -> Result<()> {
-        if self.repo.is_some() || self.author.is_some() || self.remote {
+        if self.repo.is_some() || self.review.is_some() || self.author.is_some() || self.remote {
             bail!(
-                "Cannot combine local review formatting with remote review options such as --repo, --author, or --remote"
+                "Cannot combine local review formatting with remote review options such as --repo, --review, --author, or --remote"
             );
         }
 
@@ -122,11 +129,7 @@ impl ReviewFormatCommand {
         client: &(impl GetCurrentUserClient + ListReviewsClient + ListPullRequestsClient),
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch),
     ) -> Result<String> {
-        let review_argument = self
-            .review_or_file
-            .as_ref()
-            .map(|s| s.to_string_lossy().into_owned());
-        let review = review_argument.as_deref().map(parse_review_id_or_index);
+        let review = self.review.as_deref().map(parse_review_id_or_index);
         if let Some(ReviewIdOrIndex::Id(review_id)) = review {
             return Ok(review_id.to_string());
         }
@@ -194,6 +197,13 @@ impl ReviewFormatCommand {
         owner: &str,
         repo: &str,
     ) -> Result<u32> {
+        if let Some(pr_number) = self.pr_or_file.as_ref() {
+            let pr_number = pr_number.to_string_lossy();
+            return pr_number
+                .parse::<u32>()
+                .with_context(|| format!("Cannot interpret {pr_number:?} as a PR number"));
+        }
+
         let branch = repository.get_upstream_branch()?;
         let (_, branch) = branch.split_once('/').unwrap_or(("", &branch));
         eprintln!("Branch {branch}");

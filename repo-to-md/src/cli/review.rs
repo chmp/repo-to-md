@@ -114,12 +114,12 @@ mod tests {
 
     #[test]
     fn parse_review_defaults_unknown_subcommand_to_format_argument() {
-        let cmd = ReviewCommand::from_args(&["repo-to-md", "review"], &["review-123"]).unwrap();
+        let cmd = ReviewCommand::from_args(&["repo-to-md", "review"], &["42"]).unwrap();
         let ReviewSubcommand::Format(format) = cmd.command else {
             panic!("expected review format command");
         };
 
-        assert_eq!(format.review_or_file, Some(PathBuf::from("review-123")));
+        assert_eq!(format.pr_or_file, Some(PathBuf::from("42")));
     }
 
     #[test]

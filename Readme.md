@@ -30,13 +30,14 @@ repo-to-md review format
 ```
 
 This command auto-detects the repository from git remote, if configured. To
-format a specific review, pass the review ID or review index as the positional
+format the last review for a specific PR, pass the PR number as the positional
 argument:
 
 ```bash
-repo-to-md review format <REVIEW_ID>
-repo-to-md review format
+repo-to-md review format <PR_NUMBER>
 ```
+
+Use `--review` to select a specific review ID or index.
 
 To specify owner and repository explicitly, use:
 
@@ -87,8 +88,10 @@ The default behavior auto-detects the PR from the current branch and selects the
 last review. Use flags to override:
 
 ```bash
-repo-to-md review format <REVIEW_ID>                   # Specific review
-repo-to-md review format                               # Last review
+repo-to-md review format <PR_NUMBER>                   # Last review on a PR
+repo-to-md review format <PR_NUMBER> --review 1        # Review by index
+repo-to-md review format <PR_NUMBER> --review <ID>     # Review by ID
+repo-to-md review format                               # Last review on current branch's PR
 repo-to-md review format --author @me                  # Filter by author
 repo-to-md review format --repo owner/repo             # Override repository
 repo-to-md review format --remote review-comments.json # Force remote lookup
@@ -96,8 +99,8 @@ repo-to-md review format --remote review-comments.json # Force remote lookup
 
 For all available options, run `repo-to-md review format --help`.
 The `format` subcommand may be omitted when the first argument is not a known
-review subcommand, so `repo-to-md review review-id` is accepted as shorthand for
-`repo-to-md review format review-id`.
+review subcommand, so `repo-to-md review 42` is accepted as shorthand for
+`repo-to-md review format 42`.
 
 ### Fetching issues
 

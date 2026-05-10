@@ -36,7 +36,8 @@ The command has many options
 
 - `--author <USERNAME>` to filter the reviews by author
 - `--repo <REPOSTITORY>` to select the repository as `owner/repo`
-- `<INDEX OR ID>` to select a specific review
+- `<PR NUMBER>` to select a specific PR by number
+- `--review <INDEX OR ID>` to select a specific review
 
 Examples:
 
@@ -46,6 +47,9 @@ repo-to-md review format --repo chmp/repo-to-md
 
 # select the last review for the current branch
 repo-to-md review format
+
+# select the second review on PR 6
+repo-to-md review format 6 --review 2
 ```
 
 ## Output format

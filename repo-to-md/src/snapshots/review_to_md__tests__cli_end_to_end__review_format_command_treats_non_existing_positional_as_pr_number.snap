@@ -27,7 +27,7 @@ fn main() {
     println!("Hello");
     let x = 42;
     // <review>
-    // Positional review id comment
+    // Positional PR review comment
     // </review>
 }
 ```
