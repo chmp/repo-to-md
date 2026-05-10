@@ -142,6 +142,10 @@ cargo run -- issue format <ISSUE_NUMBER>
 cargo run -- issue format <ISSUE_NUMBER> --repo <OWNER/REPO>
 ```
 
+The `format` subcommand may be omitted when the first argument is not a known
+issue subcommand, so `cargo run -- issue <ISSUE_NUMBER>` is accepted as shorthand
+for `cargo run -- issue format <ISSUE_NUMBER>`.
+
 Review local changes with web UI:
 
 ```bash

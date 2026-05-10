@@ -134,6 +134,10 @@ repo-to-md issue format 42
 repo-to-md issue format 42 --repo owner/repo
 ```
 
+The `format` subcommand may be omitted when the first argument is not a known
+issue subcommand, so `repo-to-md issue 42` is accepted as shorthand for
+`repo-to-md issue format 42`.
+
 The repository is auto-detected from the `origin` remote when not specified.
 
 ### Local review
