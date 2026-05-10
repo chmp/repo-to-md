@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
@@ -7,9 +6,10 @@ use argh::FromArgs;
 
 use crate::{
     client::{
-        FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient, ListReviewsClient,
-        Review,
+        Comment, FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient,
+        ListReviewsClient, Review,
     },
+    executable::check_executable,
     formatting::{group_comments_by_file, write_comments_as_markdown},
     local::CommentsFile,
     repository::{GetCurrentBranch, GetRepoistoryInfo},
@@ -39,10 +39,6 @@ pub struct ReviewFormatCommand {
     /// treat the positional argument as a remote review even if a matching file exists
     #[argh(switch)]
     pub remote: bool,
-
-    /// output file for local review formatting (default: stdout)
-    #[argh(option, short = 'o')]
-    pub output: Option<PathBuf>,
 }
 
 impl ReviewFormatCommand {
@@ -57,13 +53,13 @@ impl ReviewFormatCommand {
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch),
         writer: &mut impl Write,
     ) -> Result<()> {
-        if self.should_format_local_review() {
-            return self.run_local_format(writer);
-        }
-
-        self.ensure_no_local_options_for_remote_format()?;
-        let review_id = self.get_review_id(client, repository)?;
-        let comments = client.fetch_review_comments(&review_id)?;
+        let comments = if self.should_format_local_review() {
+            self.ensure_no_remote_options_for_local_format()?;
+            self.fetch_local_comments()?
+        } else {
+            let review_id = self.get_review_id(client, repository)?;
+            client.fetch_review_comments(&review_id)?
+        };
 
         if comments.is_empty() {
             eprintln!("No comments found");
@@ -76,34 +72,57 @@ impl ReviewFormatCommand {
         Ok(())
     }
 
-    pub fn requires_gh(&self) -> bool {
-        !self.should_format_local_review()
-    }
+    pub fn check_requirements(&self) -> Result<()> {
+        if self.should_format_local_review() {
+            return Ok(());
+        }
+        check_executable("gh")?;
 
-    pub fn requires_git(&self) -> bool {
-        !self.should_format_local_review()
-            && self.repo.is_none()
+        if self.repo.is_none()
             && !matches!(
                 self.review.as_deref().map(parse_review_id_or_index),
                 Some(ReviewIdOrIndex::Id(_))
             )
+        {
+            check_executable("git")?;
+        }
+        Ok(())
     }
 
     fn should_format_local_review(&self) -> bool {
-        !self.remote && (self.output.is_some() || self.positional_file_exists())
+        !self.remote && self.pr_or_file.as_ref().is_some_and(|path| path.exists())
     }
 
-    fn positional_file_exists(&self) -> bool {
-        self.pr_or_file.as_ref().is_some_and(|path| path.exists())
-    }
-
-    fn run_local_format(self, writer: &mut impl Write) -> Result<()> {
-        self.ensure_no_remote_options_for_local_format()?;
-
+    fn fetch_local_comments(self) -> Result<Vec<Comment>> {
         let comments_file = self
             .pr_or_file
             .unwrap_or_else(|| PathBuf::from("review-comments.json"));
-        write_local_comments_as_markdown(comments_file, self.output, writer)
+
+        let comments_file_content = CommentsFile::from_path(&comments_file).context(format!(
+                "Failed to open comments file: {path}. Please run `repo-to-md review local` to create one",
+                path = comments_file.display(),
+            ))?;
+
+        if comments_file_content.comments.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let diff = SideBySideDiff::parse(&comments_file_content.raw_diff)?;
+
+        let mut comments = comments_file_content.comments;
+        for comment in &mut comments {
+            if comment.path == "__global__" || comment.line.is_none() {
+                continue;
+            }
+
+            if let Some(line) = comment.line
+                && let Some(hunk) = diff.find_hunk(&comment.path, line)
+            {
+                comment.diff_hunk = hunk.to_unified();
+            }
+        }
+
+        Ok(comments.into_iter().filter(|c| !c.is_minimized).collect())
     }
 
     fn ensure_no_remote_options_for_local_format(&self) -> Result<()> {
@@ -111,14 +130,6 @@ impl ReviewFormatCommand {
             bail!(
                 "Cannot combine local review formatting with remote review options such as --repo, --review, --author, or --remote"
             );
-        }
-
-        Ok(())
-    }
-
-    fn ensure_no_local_options_for_remote_format(&self) -> Result<()> {
-        if self.output.is_some() {
-            bail!("Cannot combine --output with remote review formatting");
         }
 
         Ok(())
@@ -235,63 +246,6 @@ impl ReviewFormatCommand {
     }
 }
 
-fn write_local_comments_as_markdown(
-    comments_file: PathBuf,
-    output: Option<PathBuf>,
-    writer: &mut impl Write,
-) -> Result<()> {
-    let comments_file_content = CommentsFile::from_path(&comments_file).context(format!(
-        "Failed to open comments file: {path}. Please run `repo-to-md review local` to create one",
-        path = comments_file.display(),
-    ))?;
-
-    if comments_file_content.comments.is_empty() {
-        eprintln!("No comments to export.");
-        return Ok(());
-    }
-
-    let diff = SideBySideDiff::parse(&comments_file_content.raw_diff)?;
-
-    let mut comments = comments_file_content.comments;
-    for comment in &mut comments {
-        if comment.path == "__global__" || comment.line.is_none() {
-            continue;
-        }
-
-        if let Some(line) = comment.line
-            && let Some(hunk) = diff.find_hunk(&comment.path, line)
-        {
-            comment.diff_hunk = hunk.to_unified();
-        }
-    }
-
-    let comments: Vec<_> = comments.into_iter().filter(|c| !c.is_minimized).collect();
-    if comments.is_empty() {
-        eprintln!("No active comments to export (all minimized).");
-        return Ok(());
-    }
-
-    let grouped_comments = group_comments_by_file(comments);
-
-    match output {
-        Some(path) => {
-            let file = File::create(&path).context(format!(
-                "Failed to create output file: {path}",
-                path = path.display(),
-            ))?;
-            let mut writer = BufWriter::new(file);
-            write_comments_as_markdown(&mut writer, grouped_comments)?;
-            writer.flush()?;
-            eprintln!("Exported comments to {path}", path = path.display());
-        }
-        None => {
-            write_comments_as_markdown(writer, grouped_comments)?;
-        }
-    }
-
-    Ok(())
-}
-
 fn parse_review_id_or_index(s: &str) -> ReviewIdOrIndex<'_> {
     if let Ok(index) = s.parse::<i32>() {
         ReviewIdOrIndex::Index(index)
@@ -353,7 +307,10 @@ pub(crate) fn select_review_by_index<'a>(reviews: &[&'a Review], index: i32) -> 
 mod tests {
     use tempfile::NamedTempFile;
 
-    use crate::client::{CommentCount, MockGitHubClient, User};
+    use crate::{
+        client::{CommentCount, MockGitHubClient, User},
+        repository::MockRepository,
+    };
 
     use super::*;
 
@@ -496,8 +453,16 @@ mod tests {
         temp_file.flush().unwrap();
 
         let mut output = Vec::new();
-        let result =
-            write_local_comments_as_markdown(temp_file.path().to_path_buf(), None, &mut output);
-        assert!(result.is_ok());
+
+        let cmd = ReviewFormatCommand {
+            pr_or_file: Some(temp_file.path().to_path_buf()),
+            ..Default::default()
+        };
+        cmd.run(
+            &MockGitHubClient::new("user"),
+            &MockRepository::new("foo", "bar", "baz"),
+            &mut output,
+        )
+        .unwrap();
     }
 }

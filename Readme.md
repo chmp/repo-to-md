@@ -150,10 +150,6 @@ When the positional argument names an existing path, `review format` treats it a
 a local comments file. Otherwise it is treated as a GitHub review ID or review
 index. To customize the review comments or the output to a file use
 
-```bash
-repo-to-md review format my-review.json -o review.md
-```
-
 ## How it works
 
 This tool uses the GitHub cli `gh` and the Git cli `git` for the following

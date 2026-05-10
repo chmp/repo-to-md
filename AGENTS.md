@@ -175,7 +175,6 @@ Format comments as markdown:
 
 ```bash
 cargo run -- review format review-comments.json     # Format specific file to stdout
-cargo run -- review format -o out.md                # Format to file
 ```
 
 When the positional argument names an existing path, `review format` treats it as

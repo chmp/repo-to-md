@@ -33,12 +33,6 @@ repo-to-md review format path/to/comments.json
 The comments argument must point to an existing file. Otherwise `review format`
 interprets the positional argument as a GitHub review ID or review index.
 
-Output to a file instead of stdout:
-
-```bash
-repo-to-md review format -o output.md
-```
-
 ## Output format
 
 Generates markdown with file sections containing code context and embedded

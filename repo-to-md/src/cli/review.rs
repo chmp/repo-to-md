@@ -8,7 +8,6 @@ use crate::{
     client::{
         FetchReviewCommentsClient, GetCurrentUserClient, ListPullRequestsClient, ListReviewsClient,
     },
-    executable::check_executable,
     repository::{CheckWorkingDirectory, GetCurrentBranch, GetRepoistoryInfo},
 };
 
@@ -52,18 +51,9 @@ impl ReviewCommand {
 
     pub fn check_requirements(&self) -> Result<()> {
         match &self.command {
-            ReviewSubcommand::Format(cmd) => {
-                if cmd.requires_gh() {
-                    check_executable("gh")?;
-                }
-                if cmd.requires_git() {
-                    check_executable("git")?;
-                }
-            }
-            ReviewSubcommand::Local(cmd) => cmd.check_requirements()?,
+            ReviewSubcommand::Format(cmd) => cmd.check_requirements(),
+            ReviewSubcommand::Local(cmd) => cmd.check_requirements(),
         }
-
-        Ok(())
     }
 }
 
