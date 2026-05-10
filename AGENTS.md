@@ -103,6 +103,10 @@ cargo run -- review format --pr <PR_NUMBER>
 cargo run -- review format --pr <PR_NUMBER> --repo <OWNER/REPO>
 ```
 
+The `format` subcommand may be omitted when the first argument is not a known
+review subcommand, so `cargo run -- review --pr <PR_NUMBER>` is accepted as
+shorthand for `cargo run -- review format --pr <PR_NUMBER>`.
+
 Fetch comments from a specific review (skip interactive selection):
 
 ```bash

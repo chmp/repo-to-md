@@ -92,6 +92,9 @@ repo-to-md review format --repo owner/repo             # Override repository
 ```
 
 For all available options, run `repo-to-md review format --help`.
+The `format` subcommand may be omitted when the first argument is not a known
+review subcommand, so `repo-to-md review --pr 78` is accepted as shorthand for
+`repo-to-md review format --pr 78`.
 
 ### Apply mode
 

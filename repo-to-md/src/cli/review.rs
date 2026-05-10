@@ -2,7 +2,7 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use argh::FromArgs;
+use argh::{EarlyExit, FromArgs};
 
 use crate::{
     apply::{apply_comments_to_files, print_apply_result},
@@ -16,11 +16,16 @@ use crate::{
 };
 
 /// Commands for reviewing GitHub PR comments and local diffs
+pub struct ReviewCommand {
+    pub command: ReviewSubcommand,
+}
+
+/// Commands for reviewing GitHub PR comments and local diffs
 #[derive(FromArgs)]
 #[argh(subcommand, name = "review")]
-pub struct ReviewCommand {
+struct DerivedReviewCommand {
     #[argh(subcommand)]
-    pub command: ReviewSubcommand,
+    command: ReviewSubcommand,
 }
 
 #[derive(FromArgs)]
@@ -104,6 +109,50 @@ impl ReviewCommand {
             ReviewSubcommand::Local(_) => false,
         }
     }
+}
+
+impl FromArgs for ReviewCommand {
+    fn from_args(command_name: &[&str], args: &[&str]) -> std::result::Result<Self, EarlyExit> {
+        match args.first().copied() {
+            Some("format" | "local" | "help" | "--help") | None => {
+                DerivedReviewCommand::from_args(command_name, args).map(|cmd| Self {
+                    command: cmd.command,
+                })
+            }
+            Some(_) => parse_review_format(command_name, args),
+        }
+    }
+
+    fn redact_arg_values(
+        command_name: &[&str],
+        args: &[&str],
+    ) -> std::result::Result<Vec<String>, EarlyExit> {
+        match args.first().copied() {
+            Some("format" | "local" | "help" | "--help") | None => {
+                DerivedReviewCommand::redact_arg_values(command_name, args)
+            }
+            Some(_) => {
+                let mut format_command_name = command_name.to_vec();
+                format_command_name.push("format");
+                ReviewFormatCommand::redact_arg_values(&format_command_name, args)
+            }
+        }
+    }
+}
+
+impl argh::SubCommand for ReviewCommand {
+    const COMMAND: &'static argh::CommandInfo = DerivedReviewCommand::COMMAND;
+}
+
+fn parse_review_format(
+    command_name: &[&str],
+    args: &[&str],
+) -> std::result::Result<ReviewCommand, EarlyExit> {
+    let mut format_command_name = command_name.to_vec();
+    format_command_name.push("format");
+    ReviewFormatCommand::from_args(&format_command_name, args).map(|cmd| ReviewCommand {
+        command: ReviewSubcommand::Format(cmd),
+    })
 }
 
 /// Handles the review format subcommand - fetches and formats PR comments.
@@ -533,5 +582,38 @@ mod tests {
 
         let result = resolve_author_filter("@mE", &client).unwrap();
         assert_eq!(result, "testuser");
+    }
+
+    #[test]
+    fn parse_review_defaults_unknown_subcommand_to_format_argument() {
+        let cmd = ReviewCommand::from_args(&["repo-to-md", "review"], &["review-123"]).unwrap();
+        let ReviewSubcommand::Format(format) = cmd.command else {
+            panic!("expected review format command");
+        };
+
+        assert_eq!(format.review_or_file, Some(PathBuf::from("review-123")));
+    }
+
+    #[test]
+    fn parse_review_defaults_options_to_format_arguments() {
+        let cmd =
+            ReviewCommand::from_args(&["repo-to-md", "review"], &["--pr", "42", "--review", "-1"])
+                .unwrap();
+        let ReviewSubcommand::Format(format) = cmd.command else {
+            panic!("expected review format command");
+        };
+
+        assert_eq!(format.pr, Some(42));
+        assert_eq!(format.review, Some(String::from("-1")));
+    }
+
+    #[test]
+    fn parse_review_keeps_known_local_subcommand() {
+        let cmd = ReviewCommand::from_args(&["repo-to-md", "review"], &["local", "main"]).unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert_eq!(local.refs, vec![String::from("main")]);
     }
 }
