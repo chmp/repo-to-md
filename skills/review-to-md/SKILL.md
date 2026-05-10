@@ -35,9 +35,8 @@ current user from the authentication used for the `gh` command.
 The command has many options
 
 - `--author <USERNAME>` to filter the reviews by author
-- `--pr-number <PR NUMBER>` to select a specific PR by number
 - `--repo <REPOSTITORY>` to select the repository as `owner/repo`
-- `--review <INDEX OR ID>` to select a specific review
+- `<INDEX OR ID>` to select a specific review
 
 Examples:
 
@@ -45,8 +44,8 @@ Examples:
 # select the review for the current branch in the repo chmp/repo-to-md
 repo-to-md review format --repo chmp/repo-to-md
 
-# selecth the pull request number 6
-repo-to-md review format --pr 6
+# select the last review for the current branch
+repo-to-md review format
 ```
 
 ## Output format

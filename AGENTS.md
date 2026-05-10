@@ -99,41 +99,30 @@ unless explicitly prompted.
 Fetch comments with interactive review selection:
 
 ```bash
-cargo run -- review format --pr <PR_NUMBER>
-cargo run -- review format --pr <PR_NUMBER> --repo <OWNER/REPO>
+cargo run -- review format
+cargo run -- review format --repo <OWNER/REPO>
 ```
 
 The `format` subcommand may be omitted when the first argument is not a known
-review subcommand, so `cargo run -- review --pr <PR_NUMBER>` is accepted as
-shorthand for `cargo run -- review format --pr <PR_NUMBER>`.
+review subcommand, so `cargo run -- review <REVIEW_ID>` is accepted as shorthand
+for `cargo run -- review format <REVIEW_ID>`.
 
 Fetch comments from a specific review (skip interactive selection):
 
 ```bash
-cargo run -- review format --pr <PR_NUMBER> --review <REVIEW_ID>
-cargo run -- review format --pr <PR_NUMBER> --review 1
-cargo run -- review format --pr <PR_NUMBER> --review -1
+cargo run -- review format <REVIEW_ID>
+cargo run -- review format 1
+cargo run -- review format
 ```
 
 Filter reviews by author:
 
 ```bash
-cargo run -- review format --pr <PR_NUMBER> --author <USERNAME>
-cargo run -- review format --pr <PR_NUMBER> --author <USERNAME> --review -1
-cargo run -- review format --pr <PR_NUMBER> --author @me
-cargo run -- review format --pr <PR_NUMBER> --author @me --review -1
+cargo run -- review format --author <USERNAME>
+cargo run -- review format --author <USERNAME>
+cargo run -- review format --author @me
+cargo run -- review format --author @me
 ```
-
-Apply comments directly to source files:
-
-```bash
-cargo run -- review format --pr <PR_NUMBER> --apply
-cargo run -- review format --pr <PR_NUMBER> --apply --force  # Skip uncommitted changes check
-```
-
-The `--apply` flag inserts review comments directly into the source files using
-`<review>` tags. By default, it refuses to run if there are uncommitted changes
-in the working directory. Use `--force` to bypass this check.
 
 Fetch issues:
 
@@ -246,8 +235,11 @@ repo-to-md/src/
 ├── main.rs             - CLI entry point
 ├── cli/                - CLI command implementations
 │   ├── mod.rs          - CLI struct, command dispatch
-│   ├── review.rs       - Review command (fetch PR review comments)
-│   ├── issue.rs        - Issue command (fetch GitHub issues)
+│   ├── review.rs       - Review supercommand
+│   ├── review_format.rs - Format remote and local review comments
+│   ├── review_local.rs - Local review web UI command
+│   ├── issue.rs        - Issue supercommand
+│   ├── issue_format.rs - Format GitHub issues
 │   ├── install_skill.rs - Skill installation command
 │   └── query.rs        - Query command
 ├── client/             - GitHub API client
@@ -284,8 +276,11 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
 
 - **main.rs** - Entry point, invokes CLI from lib
 - **cli/** - Command implementations using argh for argument parsing
-  - **review.rs** - Handles `--review`, `--author`, `--pr` options
-  - **issue.rs** - Fetches and formats GitHub issues
+  - **review.rs** - Review supercommand
+  - **review_format.rs** - Formats GitHub and local review comments
+  - **review_local.rs** - Launches the local review web UI
+  - **issue.rs** - Issue supercommand
+  - **issue_format.rs** - Fetches and formats GitHub issues
 - **client/** - GitHub API abstraction with trait-based design for testability
   - **github.rs** - Real implementation using `gh` CLI
   - **mock.rs** - MockGitHubClient for testing
@@ -319,7 +314,7 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
    - Display review table with author, date, comment count, and description
    - User selects review by number
    - Fetch comments from selected review via GraphQL (`fetch_review_comments`)
-2. **Direct mode** (`--review-id` provided):
+2. **Direct mode** (review ID positional provided):
    - Fetch comments from specified review via GraphQL
 3. **File mode** (`--json-file` provided):
    - Read comments from local JSON file
@@ -428,7 +423,7 @@ tests may fail due to module loading restrictions without a server).
 - `tests::integration` - Review comment formatting tests with example files
 - `tests::cli_end_to_end` - End-to-end CLI tests using MockGitHubClient and
   MockRepository. Tests the full command flow including:
-  - Review command with various options (--pr, --review, --author, @me)
+  - Review command with various options (review ID/index, --author, @me)
   - Issue command with repo auto-detection
   - PR auto-detection from current branch
 

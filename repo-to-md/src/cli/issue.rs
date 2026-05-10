@@ -1,10 +1,11 @@
 use std::io::Write;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use argh::{EarlyExit, FromArgs};
 
 use crate::{
-    client::FetchIssueClient, formatting::write_issue_as_markdown, repository::GetRepoistoryInfo,
+    cli::issue_format::IssueFormatCommand, client::FetchIssueClient, executable::check_executable,
+    repository::GetRepoistoryInfo,
 };
 
 /// Commands for GitHub issues
@@ -26,19 +27,6 @@ pub enum IssueSubcommand {
     Format(IssueFormatCommand),
 }
 
-#[derive(FromArgs, Default)]
-#[argh(subcommand, name = "format")]
-/// Fetch and format GitHub issue as markdown
-pub struct IssueFormatCommand {
-    /// issue number to fetch
-    #[argh(positional)]
-    pub issue_number: u32,
-
-    /// repository in owner/repo format (auto-detected from git remote if not provided)
-    #[argh(option)]
-    pub repo: Option<String>,
-}
-
 impl IssueCommand {
     pub fn run(
         self,
@@ -51,10 +39,14 @@ impl IssueCommand {
         }
     }
 
-    pub fn requires_git(&self) -> bool {
+    pub fn check_requirements(&self) -> Result<()> {
+        check_executable("gh")?;
         match &self.command {
-            IssueSubcommand::Format(cmd) => cmd.repo.is_none(),
+            IssueSubcommand::Format(cmd) if cmd.requires_git() => check_executable("git")?,
+            IssueSubcommand::Format(_) => {}
         }
+
+        Ok(())
     }
 }
 
@@ -102,42 +94,6 @@ fn parse_issue_format(
     })
 }
 
-impl IssueFormatCommand {
-    pub fn run(
-        self,
-        client: &impl FetchIssueClient,
-        repository: &impl GetRepoistoryInfo,
-        writer: &mut impl Write,
-    ) -> Result<()> {
-        let (owner, repo) = self.get_owner_and_repo(repository)?;
-
-        eprintln!(
-            "Fetching issue #{} from {}/{}...",
-            self.issue_number, owner, repo
-        );
-
-        let issue = client.fetch_issue(&owner, &repo, self.issue_number)?;
-        write_issue_as_markdown(writer, &issue)?;
-
-        Ok(())
-    }
-
-    fn get_owner_and_repo(&self, repository: &impl GetRepoistoryInfo) -> Result<(String, String)> {
-        if let Some(repo) = self.repo.as_ref() {
-            let Some((owner, repo)) = repo.split_once('/') else {
-                bail!("Cannot interpret {repo:?} as 'owner/repo'");
-            };
-
-            Ok((owner.to_string(), repo.to_string()))
-        } else {
-            eprintln!("Determine repository from remotes");
-            repository
-                .get_github_owner_and_repo()
-                .context("Failed to auto-detect repository. Please provide --repo")
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,17 +105,6 @@ mod tests {
 
         assert_eq!(format.issue_number, 42);
         assert_eq!(format.repo, None);
-    }
-
-    #[test]
-    fn parse_issue_defaults_options_to_format_arguments() {
-        let cmd =
-            IssueCommand::from_args(&["repo-to-md", "issue"], &["42", "--repo", "owner/repo"])
-                .unwrap();
-        let IssueSubcommand::Format(format) = cmd.command;
-
-        assert_eq!(format.issue_number, 42);
-        assert_eq!(format.repo, Some(String::from("owner/repo")));
     }
 
     #[test]

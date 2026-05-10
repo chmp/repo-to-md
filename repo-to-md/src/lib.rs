@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-pub mod apply;
 pub mod cli;
 pub mod client;
 pub mod diff;

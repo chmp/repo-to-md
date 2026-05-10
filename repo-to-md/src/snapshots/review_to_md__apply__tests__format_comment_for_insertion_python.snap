@@ -1,8 +1,0 @@
----
-source: repo-to-md/src/apply.rs
-expression: result
-snapshot_kind: text
----
-  # <review>
-  # Add docstring
-  # </review>

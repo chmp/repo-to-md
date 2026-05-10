@@ -18,7 +18,7 @@ const PORT_ENV: &str = "REPO_TO_MD_PORT";
 /// Launch a web UI for reviewing local git diffs
 #[derive(FromArgs)]
 #[argh(subcommand, name = "local")]
-pub struct LocalCommand {
+pub struct ReviewLocalCommand {
     /// base git ref to compare against (auto-detected if not provided)
     #[argh(positional)]
     pub refs: Vec<String>,
@@ -48,9 +48,8 @@ pub struct LocalCommand {
     pub force: bool,
 }
 
-impl LocalCommand {
+impl ReviewLocalCommand {
     pub fn run(self) -> Result<()> {
-        check_executable("git")?;
         let bind = self.bind_address()?;
         let port = self.port()?;
 
@@ -104,33 +103,31 @@ impl LocalCommand {
             })
     }
 
+    pub fn check_requirements(&self) -> Result<()> {
+        check_executable("git")
+    }
+
     fn bind_address(&self) -> Result<String> {
-        Ok(resolve_bind_address(
-            self.bind.as_deref(),
-            std::env::var(BIND_ENV).ok().as_deref(),
-        ))
+        Ok(self
+            .bind
+            .clone()
+            .or_else(|| std::env::var(BIND_ENV).ok())
+            .unwrap_or_else(|| DEFAULT_BIND.to_string()))
     }
 
     fn port(&self) -> Result<u16> {
-        resolve_port(self.port, std::env::var(PORT_ENV).ok().as_deref())
+        if let Some(port) = self.port {
+            return Ok(port);
+        }
+
+        let Some(port) = std::env::var(PORT_ENV).ok() else {
+            return Ok(DEFAULT_PORT);
+        };
+
+        port.parse::<u16>().with_context(|| {
+            format!("Failed to parse {PORT_ENV}={port:?} as a valid TCP port number")
+        })
     }
-}
-
-fn resolve_bind_address(cli_bind: Option<&str>, env_bind: Option<&str>) -> String {
-    cli_bind.or(env_bind).unwrap_or(DEFAULT_BIND).to_string()
-}
-
-fn resolve_port(cli_port: Option<u16>, env_port: Option<&str>) -> Result<u16> {
-    if let Some(port) = cli_port {
-        return Ok(port);
-    }
-
-    let Some(port) = env_port else {
-        return Ok(DEFAULT_PORT);
-    };
-
-    port.parse::<u16>()
-        .with_context(|| format!("Failed to parse {PORT_ENV}={port:?} as a valid TCP port number"))
 }
 
 fn open_url(url: &str) {
@@ -208,28 +205,80 @@ fn validate_and_prepare_session(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
 
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
     #[test]
-    fn bind_address_prefers_cli_then_env_then_default() {
-        assert_eq!(
-            resolve_bind_address(Some("0.0.0.0"), Some("127.0.0.2")),
-            "0.0.0.0"
-        );
-        assert_eq!(resolve_bind_address(None, Some("127.0.0.2")), "127.0.0.2");
-        assert_eq!(resolve_bind_address(None, None), DEFAULT_BIND);
+    fn bind_address_prefers_cli() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(BIND_ENV, Some("127.0.0.2"));
+        let command = ReviewLocalCommand {
+            bind: Some("0.0.0.0".to_string()),
+            ..test_command()
+        };
+
+        assert_eq!(command.bind_address().unwrap(), "0.0.0.0");
+        set_env(BIND_ENV, None);
     }
 
     #[test]
-    fn port_prefers_cli_then_env_then_default() {
-        assert_eq!(resolve_port(Some(9000), Some("9001")).unwrap(), 9000);
-        assert_eq!(resolve_port(None, Some("9001")).unwrap(), 9001);
-        assert_eq!(resolve_port(None, None).unwrap(), DEFAULT_PORT);
+    fn bind_address_uses_env_then_default() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(BIND_ENV, Some("127.0.0.2"));
+        assert_eq!(test_command().bind_address().unwrap(), "127.0.0.2");
+        set_env(BIND_ENV, None);
+        assert_eq!(test_command().bind_address().unwrap(), DEFAULT_BIND);
+    }
+
+    #[test]
+    fn port_prefers_cli() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(PORT_ENV, Some("9001"));
+        let command = ReviewLocalCommand {
+            port: Some(9000),
+            ..test_command()
+        };
+
+        assert_eq!(command.port().unwrap(), 9000);
+        set_env(PORT_ENV, None);
+    }
+
+    #[test]
+    fn port_uses_env_then_default() {
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(PORT_ENV, Some("9001"));
+        assert_eq!(test_command().port().unwrap(), 9001);
+        set_env(PORT_ENV, None);
+        assert_eq!(test_command().port().unwrap(), DEFAULT_PORT);
     }
 
     #[test]
     fn port_rejects_invalid_env_value() {
-        let error = resolve_port(None, Some("not-a-port")).unwrap_err();
+        let _guard = ENV_LOCK.lock().expect("lock poisoned");
+        set_env(PORT_ENV, Some("not-a-port"));
+        let error = test_command().port().unwrap_err();
         assert!(error.to_string().contains("REPO_TO_MD_PORT"));
+        set_env(PORT_ENV, None);
+    }
+
+    fn test_command() -> ReviewLocalCommand {
+        ReviewLocalCommand {
+            refs: Vec::new(),
+            port: None,
+            bind: None,
+            output: PathBuf::from("review-comments.json"),
+            no_open: false,
+            force: false,
+        }
+    }
+
+    fn set_env(key: &str, value: Option<&str>) {
+        match value {
+            Some(value) => unsafe { std::env::set_var(key, value) },
+            None => unsafe { std::env::remove_var(key) },
+        }
     }
 }

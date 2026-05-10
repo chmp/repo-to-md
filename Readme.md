@@ -23,23 +23,25 @@ Prerequisites:
   authenticated
 - Rust toolchain for building from source
 
-To format the comments for pull request 78, use
+To format the comments for the current branch's last pull request review, use
 
 ```bash
-repo-to-md review format --pr 78
+repo-to-md review format
 ```
 
-This commands auto-detects the repository from git remote, if it configured. To
-specify owner and repository explicitly, use:
+This command auto-detects the repository from git remote, if configured. To
+format a specific review, pass the review ID or review index as the positional
+argument:
 
 ```bash
-repo-to-md review format --pr <PR_NUMBER> --repo <OWNER/REPO>
+repo-to-md review format <REVIEW_ID>
+repo-to-md review format
 ```
 
-Example:
+To specify owner and repository explicitly, use:
 
 ```bash
-repo-to-md review format --pr 78 --repo chmp/repo-to-md
+repo-to-md review format --repo chmp/repo-to-md
 ```
 
 ### AI Agent Skills
@@ -85,45 +87,17 @@ The default behavior auto-detects the PR from the current branch and selects the
 last review. Use flags to override:
 
 ```bash
-repo-to-md review format --pr 78                      # Specific PR
-repo-to-md review format --review -1                   # Last review
+repo-to-md review format <REVIEW_ID>                   # Specific review
+repo-to-md review format                               # Last review
 repo-to-md review format --author @me                  # Filter by author
 repo-to-md review format --repo owner/repo             # Override repository
+repo-to-md review format --remote review-comments.json # Force remote lookup
 ```
 
 For all available options, run `repo-to-md review format --help`.
 The `format` subcommand may be omitted when the first argument is not a known
-review subcommand, so `repo-to-md review --pr 78` is accepted as shorthand for
-`repo-to-md review format --pr 78`.
-
-### Apply mode
-
-Instead of outputting markdown, you can apply review comments directly to source
-files:
-
-```bash
-repo-to-md review format --apply              # Apply comments from current branch's PR
-repo-to-md review format --pr 78 --apply      # Apply comments from specific PR
-```
-
-This inserts comments directly into your source files using language-appropriate
-comment syntax, wrapped in `<review>` tags:
-
-```rust
-fn main() {
-    let x = 1;
-    // <review>
-    // Consider using a more descriptive name
-    // </review>
-}
-```
-
-By default, `--apply` refuses to run if you have uncommitted changes (to make it
-easy to revert). Use `--force` to bypass this safety check.
-
-```bash
-repo-to-md review format --apply --force      # Skip uncommitted changes check
-```
+review subcommand, so `repo-to-md review review-id` is accepted as shorthand for
+`repo-to-md review format review-id`.
 
 ### Fetching issues
 

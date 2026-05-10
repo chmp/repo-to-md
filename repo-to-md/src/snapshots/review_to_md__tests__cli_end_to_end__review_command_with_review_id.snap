@@ -1,7 +1,7 @@
 ---
 source: repo-to-md/src/tests.rs
+assertion_line: 604
 expression: output_str
-snapshot_kind: text
 ---
 # Review comments
 
