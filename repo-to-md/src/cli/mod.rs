@@ -1,6 +1,5 @@
 mod issue;
 mod issue_format;
-mod query;
 pub(crate) mod review;
 pub(crate) mod review_format;
 mod review_local;
@@ -13,12 +12,11 @@ use argh::FromArgs;
 
 pub use issue::IssueCommand;
 pub use issue_format::IssueFormatCommand;
-pub use query::QueryCommand;
 pub use review::ReviewCommand;
 pub use review_format::ReviewFormatCommand;
 pub use skills::Skills;
 
-use crate::{client::GithubClient, executable::check_executable, repository::LocalRepository};
+use crate::{client::GithubClient, repository::LocalRepository};
 
 #[derive(FromArgs)]
 /// repo-to-md: Format reviews and issues as markdown
@@ -32,7 +30,6 @@ pub struct Cli {
 pub enum Command {
     Review(ReviewCommand),
     Issue(IssueCommand),
-    Query(QueryCommand),
     Skills(Skills),
 }
 
@@ -47,10 +44,6 @@ impl Cli {
             Command::Issue(cmd) => {
                 cmd.check_requirements()?;
                 cmd.run(&GithubClient, &LocalRepository, &mut stdout)
-            }
-            Command::Query(cmd) => {
-                check_executable("gh")?;
-                cmd.run(&GithubClient)
             }
             Command::Skills(cmd) => cmd.run(),
         }

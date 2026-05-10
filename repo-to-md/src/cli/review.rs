@@ -75,7 +75,13 @@ impl FromArgs for ReviewCommand {
                     command: cmd.command,
                 })
             }
-            Some(_) => parse_review_format(command_name, args),
+            Some(_) => {
+                let mut command_name = command_name.to_vec();
+                command_name.push("format");
+                ReviewFormatCommand::from_args(&command_name, args).map(|cmd| ReviewCommand {
+                    command: ReviewSubcommand::Format(cmd),
+                })
+            }
         }
     }
 
@@ -88,9 +94,9 @@ impl FromArgs for ReviewCommand {
                 DerivedReviewCommand::redact_arg_values(command_name, args)
             }
             Some(_) => {
-                let mut format_command_name = command_name.to_vec();
-                format_command_name.push("format");
-                ReviewFormatCommand::redact_arg_values(&format_command_name, args)
+                let mut command_name = command_name.to_vec();
+                command_name.push("format");
+                ReviewFormatCommand::redact_arg_values(&command_name, args)
             }
         }
     }
@@ -98,17 +104,6 @@ impl FromArgs for ReviewCommand {
 
 impl argh::SubCommand for ReviewCommand {
     const COMMAND: &'static argh::CommandInfo = DerivedReviewCommand::COMMAND;
-}
-
-fn parse_review_format(
-    command_name: &[&str],
-    args: &[&str],
-) -> std::result::Result<ReviewCommand, EarlyExit> {
-    let mut format_command_name = command_name.to_vec();
-    format_command_name.push("format");
-    ReviewFormatCommand::from_args(&format_command_name, args).map(|cmd| ReviewCommand {
-        command: ReviewSubcommand::Format(cmd),
-    })
 }
 
 #[cfg(test)]

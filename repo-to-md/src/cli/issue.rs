@@ -58,7 +58,13 @@ impl FromArgs for IssueCommand {
                     command: cmd.command,
                 })
             }
-            Some(_) => parse_issue_format(command_name, args),
+            Some(_) => {
+                let mut command_name = command_name.to_vec();
+                command_name.push("format");
+                IssueFormatCommand::from_args(&command_name, args).map(|cmd| IssueCommand {
+                    command: IssueSubcommand::Format(cmd),
+                })
+            }
         }
     }
 
@@ -71,9 +77,9 @@ impl FromArgs for IssueCommand {
                 DerivedIssueCommand::redact_arg_values(command_name, args)
             }
             Some(_) => {
-                let mut format_command_name = command_name.to_vec();
-                format_command_name.push("format");
-                IssueFormatCommand::redact_arg_values(&format_command_name, args)
+                let mut command_name = command_name.to_vec();
+                command_name.push("format");
+                IssueFormatCommand::redact_arg_values(&command_name, args)
             }
         }
     }
@@ -81,17 +87,6 @@ impl FromArgs for IssueCommand {
 
 impl argh::SubCommand for IssueCommand {
     const COMMAND: &'static argh::CommandInfo = DerivedIssueCommand::COMMAND;
-}
-
-fn parse_issue_format(
-    command_name: &[&str],
-    args: &[&str],
-) -> std::result::Result<IssueCommand, EarlyExit> {
-    let mut format_command_name = command_name.to_vec();
-    format_command_name.push("format");
-    IssueFormatCommand::from_args(&format_command_name, args).map(|cmd| IssueCommand {
-        command: IssueSubcommand::Format(cmd),
-    })
 }
 
 #[cfg(test)]
