@@ -1,6 +1,4 @@
 use std::fs;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -74,7 +72,7 @@ impl ReviewLocalCommand {
         let refspec = RefSpec::parse(&base, &end)?.resolve()?;
         let comments_path = match self.output.as_ref() {
             Some(path) => path.clone(),
-            None => default_comments_path(&refspec)?,
+            None => default_comments_path_in(Path::new(".review-comments"), &refspec)?,
         };
         let raw_diff = validate_and_prepare_session(&comments_path, &refspec, self.force)?;
 
@@ -132,49 +130,19 @@ impl ReviewLocalCommand {
     }
 }
 
-fn default_comments_path(refspec: &RefSpec) -> Result<PathBuf> {
-    default_comments_path_in(Path::new(".review-comments"), refspec)
-}
-
 fn default_comments_path_in(directory: &Path, refspec: &RefSpec) -> Result<PathBuf> {
-    fs::create_dir_all(directory).with_context(|| {
-        format!(
-            "Failed to create local review session directory '{path}'",
-            path = directory.display()
-        )
-    })?;
-
     let gitignore_path = directory.join(".gitignore");
-    match OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&gitignore_path)
-    {
-        Ok(mut file) => file.write_all(b"*.json\n").with_context(|| {
+    match fs::create_dir(directory) {
+        Ok(()) => fs::write(&gitignore_path, "*\n").with_context(|| {
             format!("Failed to write '{path}'", path = gitignore_path.display())
         })?,
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            let contents = fs::read_to_string(&gitignore_path).with_context(|| {
-                format!("Failed to read '{path}'", path = gitignore_path.display())
-            })?;
-            if !contents.lines().any(|line| line.trim() == "*.json") {
-                let mut file = OpenOptions::new()
-                    .append(true)
-                    .open(&gitignore_path)
-                    .with_context(|| {
-                        format!("Failed to update '{path}'", path = gitignore_path.display())
-                    })?;
-                if !contents.is_empty() && !contents.ends_with('\n') {
-                    file.write_all(b"\n")?;
-                }
-                file.write_all(b"*.json\n").with_context(|| {
-                    format!("Failed to update '{path}'", path = gitignore_path.display())
-                })?;
-            }
-        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && directory.is_dir() => {}
         Err(error) => {
             return Err(error).with_context(|| {
-                format!("Failed to create '{path}'", path = gitignore_path.display())
+                format!(
+                    "Failed to create local review session directory '{path}'",
+                    path = directory.display()
+                )
             });
         }
     }
@@ -321,32 +289,36 @@ mod tests {
     #[test]
     fn default_session_paths_are_keyed_by_commit_shas_and_ignored() {
         let directory = tempdir().unwrap();
+        let session_dir = directory.path().join(".review-comments");
         let first_refspec = test_refspec("base-a", "end-a");
         let matching_refspec = test_refspec("base-a", "end-a");
         let changed_refspec = test_refspec("base-a", "end-b");
 
-        let first_path = default_comments_path_in(directory.path(), &first_refspec).unwrap();
-        let matching_path = default_comments_path_in(directory.path(), &matching_refspec).unwrap();
-        let changed_path = default_comments_path_in(directory.path(), &changed_refspec).unwrap();
+        let first_path = default_comments_path_in(&session_dir, &first_refspec).unwrap();
+        let matching_path = default_comments_path_in(&session_dir, &matching_refspec).unwrap();
+        let changed_path = default_comments_path_in(&session_dir, &changed_refspec).unwrap();
 
         assert_eq!(first_path, matching_path);
         assert_ne!(first_path, changed_path);
         assert_eq!(
-            fs::read_to_string(directory.path().join(".gitignore")).unwrap(),
-            "*.json\n"
+            fs::read_to_string(session_dir.join(".gitignore")).unwrap(),
+            "*\n"
         );
     }
 
     #[test]
-    fn default_session_path_adds_ignore_rule_to_existing_gitignore() {
+    fn default_session_path_does_not_modify_existing_directory() {
         let directory = tempdir().unwrap();
-        fs::write(directory.path().join(".gitignore"), "# local review data\n").unwrap();
+        let session_dir = directory.path().join(".review-comments");
+        fs::create_dir(&session_dir).unwrap();
+        let gitignore_path = session_dir.join(".gitignore");
+        fs::write(&gitignore_path, "# user rules\n").unwrap();
 
-        default_comments_path_in(directory.path(), &test_refspec("base", "end")).unwrap();
+        default_comments_path_in(&session_dir, &test_refspec("base", "end")).unwrap();
 
         assert_eq!(
-            fs::read_to_string(directory.path().join(".gitignore")).unwrap(),
-            "# local review data\n*.json\n"
+            fs::read_to_string(gitignore_path).unwrap(),
+            "# user rules\n"
         );
     }
 
@@ -354,7 +326,8 @@ mod tests {
     fn matching_default_session_reuses_stored_diff() {
         let directory = tempdir().unwrap();
         let refspec = test_refspec("base-sha", "end-sha");
-        let comments_path = default_comments_path_in(directory.path(), &refspec).unwrap();
+        let session_dir = directory.path().join(".review-comments");
+        let comments_path = default_comments_path_in(&session_dir, &refspec).unwrap();
         let stored_file = CommentsFile {
             version: 1,
             start_ref: "HEAD".to_string(),

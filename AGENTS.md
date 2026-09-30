@@ -180,11 +180,11 @@ Format the most recently modified local session as markdown:
 cargo run -- review format --local
 ```
 
-Format an explicit comments file as markdown, including a legacy root file:
+Format an explicit comments file as markdown:
 
 ```bash
 cargo run -- review format .review-comments/<base-sha>-<end-sha>.json
-cargo run -- review format review-comments.json
+cargo run -- review format path/to/comments.json
 ```
 
 When the positional argument names an existing path, `review format` treats it as

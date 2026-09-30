@@ -32,8 +32,7 @@ repo-to-md review format path/to/comments.json
 
 The comments argument must point to an existing file. Otherwise `review format`
 interprets the positional argument as a GitHub review ID or review index.
-This also supports the legacy root `review-comments.json` path and paths passed
-to `repo-to-md review local -o`.
+This also supports paths passed to `repo-to-md review local -o`.
 
 ## Output format
 

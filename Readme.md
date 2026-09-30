@@ -94,7 +94,6 @@ repo-to-md review format <PR_NUMBER> --review <ID>     # Review by ID
 repo-to-md review format                               # Last review on current branch's PR
 repo-to-md review format --author @me                  # Filter by author
 repo-to-md review format --repo owner/repo             # Override repository
-repo-to-md review format --remote review-comments.json # Force remote lookup
 repo-to-md review format --local                      # Most recently modified local session
 ```
 
@@ -149,12 +148,12 @@ The most recently modified local session can be exported to markdown by running:
 repo-to-md review format --local
 ```
 
-You can also pass a local comments file explicitly, including a legacy root
-`review-comments.json` file or a path supplied with `review local -o`:
+You can also pass a local comments file explicitly, including a path supplied
+with `review local -o`:
 
 ```bash
 repo-to-md review format .review-comments/<base-sha>-<end-sha>.json
-repo-to-md review format review-comments.json
+repo-to-md review format path/to/comments.json
 ```
 
 When the positional argument names an existing path, `review format` treats it
