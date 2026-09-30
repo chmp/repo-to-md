@@ -3,7 +3,7 @@
  * Inline form for adding new comments
  */
 
-import { setupAutoResizeTextarea, setupTextareaKeyboardShortcuts } from './utils.js';
+import { escapeHtml, setupAutoResizeTextarea, setupTextareaKeyboardShortcuts } from './utils.js';
 
 class CommentForm extends HTMLElement {
     constructor() {
@@ -11,6 +11,10 @@ class CommentForm extends HTMLElement {
         this.path = '';
         this.line = 0;
         this.diffHunk = '';
+        this.isSubmitting = false;
+        this.draftBody = '';
+        this.saveMessage = '';
+        this.saveMessageType = '';
     }
 
     /**
@@ -32,17 +36,19 @@ class CommentForm extends HTMLElement {
 
     render() {
         this.innerHTML = `
-            <textarea class="comment-form-textarea" placeholder="Write a comment..."></textarea>
+            <textarea class="comment-form-textarea" placeholder="Write a comment..." ${this.isSubmitting ? 'disabled' : ''}>${escapeHtml(this.draftBody)}</textarea>
             <div class="comment-form-actions">
-                <button class="button cancel-button">Cancel</button>
-                <button class="button button-primary submit-button">Add Comment</button>
+                <button class="button cancel-button" ${this.isSubmitting ? 'disabled' : ''}>Cancel</button>
+                <button class="button button-primary submit-button" ${this.isSubmitting ? 'disabled' : ''}>${this.isSubmitting ? 'Saving...' : 'Add Comment'}</button>
             </div>
+            <div class="comment-form-status ${this.saveMessageType}" role="${this.saveMessageType === 'error' ? 'alert' : 'status'}" aria-live="${this.saveMessageType === 'error' ? 'assertive' : 'polite'}">${escapeHtml(this.saveMessage)}</div>
         `;
 
         const textarea = this.querySelector('textarea');
         textarea.focus();
 
         this.querySelector('.cancel-button').addEventListener('click', () => {
+            if (this.isSubmitting) return;
             this.dispatchEvent(new CustomEvent('form-cancel', { bubbles: true }));
         });
 
@@ -54,17 +60,38 @@ class CommentForm extends HTMLElement {
         setupTextareaKeyboardShortcuts(
             textarea,
             () => this.submit(),
-            () => this.dispatchEvent(new CustomEvent('form-cancel', { bubbles: true }))
+            () => {
+                if (!this.isSubmitting) this.dispatchEvent(new CustomEvent('form-cancel', { bubbles: true }));
+            }
         );
+    }
+
+    setSaveError(message) {
+        this.isSubmitting = false;
+        this.saveMessage = message;
+        this.saveMessageType = 'error';
+        this.render();
+        this.querySelector('textarea')?.focus();
     }
 
     submit() {
         const textarea = this.querySelector('textarea');
+        if (this.isSubmitting) return;
         const body = textarea.value.trim();
 
         if (!body) {
+            this.saveMessage = 'Enter a comment before saving.';
+            this.saveMessageType = 'error';
+            this.render();
+            this.querySelector('textarea')?.focus();
             return;
         }
+
+        this.draftBody = body;
+        this.isSubmitting = true;
+        this.saveMessage = 'Saving comment...';
+        this.saveMessageType = 'pending';
+        this.render();
 
         this.dispatchEvent(new CustomEvent('comment-submit', {
             detail: {

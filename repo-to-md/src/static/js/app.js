@@ -16,10 +16,14 @@ export class App {
         this.filesMap = new Map();  // path -> file object
         this.username = 'user';
         this.lastNavigatedCommentId = null;
+        this.pendingMutations = new Set();
+        this.statusTimer = null;
 
         this.fileTree = document.querySelector('file-tree');
         this.diffView = document.querySelector('diff-view');
         this.refInfo = document.getElementById('refInfo');
+        this.appStatus = document.getElementById('appStatus');
+        this.commentNavStatus = document.getElementById('commentNavStatus');
         this.shutdownBtn = document.getElementById('shutdownBtn');
         this.prevCommentBtn = document.getElementById('prevCommentBtn');
         this.nextCommentBtn = document.getElementById('nextCommentBtn');
@@ -38,6 +42,7 @@ export class App {
             this.comments = session.comments;
             this.viewedFiles = session.viewed_files;
             this.filesMap = new Map(session.files.map(f => [getFilePath(f), f]));
+            this.updateCommentNavigation();
 
             // Update ref info
             const refText = session.end_ref
@@ -84,6 +89,7 @@ export class App {
 
     showLoadError() {
         this.refInfo.textContent = 'Error loading diff';
+        this.updateCommentNavigation();
         this.diffView.innerHTML = `
             <div class="empty-state">
                 <h3>Error loading diff</h3>
@@ -142,27 +148,27 @@ export class App {
 
         // Viewed file toggle
         this.fileTree.addEventListener('viewed-toggle', async (e) => {
-            await this.toggleViewedFile(e.detail.path, e.detail.viewed);
+            await this.toggleViewedFile(e.detail.path, e.detail.viewed, e.detail.button);
         });
 
         // Comment submission
         document.addEventListener('comment-submit', async (e) => {
-            await this.createComment(e.detail);
+            await this.createComment(e.detail, e.target);
         });
 
         // Comment update
         document.addEventListener('comment-update', async (e) => {
-            await this.updateComment(e.detail.id, e.detail.body);
+            await this.updateComment(e.detail.id, e.detail.body, e.target);
         });
 
         // Comment deletion
         document.addEventListener('comment-delete', async (e) => {
-            await this.deleteComment(e.detail.id);
+            await this.deleteComment(e.detail.id, e.target);
         });
 
         // Comment minimize toggle
         document.addEventListener('comment-minimize', async (e) => {
-            await this.toggleMinimizeComment(e.detail.id);
+            await this.toggleMinimizeComment(e.detail.id, e.target);
         });
 
         // Comment navigation buttons in header
@@ -224,7 +230,11 @@ export class App {
         this.toggleViewedFile(currentPath, !isViewed);
     }
 
-    async toggleViewedFile(path, viewed) {
+    async toggleViewedFile(path, viewed, button = null) {
+        const operation = `viewed:${path}`;
+        if (this.pendingMutations.has(operation)) return;
+        this.pendingMutations.add(operation);
+        if (button) button.disabled = true;
         try {
             await api.setFileViewed(path, viewed);
             if (viewed) {
@@ -235,13 +245,17 @@ export class App {
             // Update just that item instead of full refresh
             this.fileTree.updateItem(path, { isViewed: viewed });
             this.updateRemainingUnviewed();
+            this.showStatus(viewed ? 'File marked as viewed.' : 'File marked as unviewed.', 'success');
         } catch (error) {
             console.error('Failed to toggle viewed status:', error);
-            alert('Failed to update viewed status. Please try again.');
+            this.showStatus(`Could not update viewed status: ${this.getErrorMessage(error)}`, 'error');
+        } finally {
+            this.pendingMutations.delete(operation);
+            if (button?.isConnected) button.disabled = false;
         }
     }
 
-    async createComment(data) {
+    async createComment(data, form) {
         try {
             const result = await api.createComment({
                 path: data.path,
@@ -254,13 +268,16 @@ export class App {
             this.comments.push(result.comment);
             this.diffView.hideCommentForm();
             this.updateViews();
+            this.showStatus('Comment added.', 'success');
         } catch (error) {
             console.error('Failed to create comment:', error);
-            alert('Failed to create comment. Please try again.');
+            const message = `Could not add comment: ${this.getErrorMessage(error)}`;
+            form?.setSaveError(message);
+            this.showStatus(message, 'error');
         }
     }
 
-    async updateComment(id, body) {
+    async updateComment(id, body, commentElement) {
         try {
             const result = await api.updateComment(id, body);
             const index = this.comments.findIndex(c => c.id === id);
@@ -268,28 +285,45 @@ export class App {
                 this.comments[index] = result.comment;
             }
             this.updateViews();
+            this.showStatus('Comment saved.', 'success');
         } catch (error) {
             console.error('Failed to update comment:', error);
-            alert('Failed to update comment. Please try again.');
+            const message = `Could not save comment: ${this.getErrorMessage(error)}`;
+            commentElement?.setSaveError(message);
+            this.showStatus(message, 'error');
         }
     }
 
-    async deleteComment(id) {
+    async deleteComment(id, commentElement) {
         if (!confirm('Are you sure you want to delete this comment?')) {
             return;
         }
 
+        const operation = `delete:${id}`;
+        if (this.pendingMutations.has(operation)) return;
+        this.pendingMutations.add(operation);
+        const button = commentElement?.querySelector('.delete-button');
+        if (button) button.disabled = true;
         try {
             await api.deleteComment(id);
             this.comments = this.comments.filter(c => c.id !== id);
             this.updateViews();
+            this.showStatus('Comment deleted.', 'success');
         } catch (error) {
             console.error('Failed to delete comment:', error);
-            alert('Failed to delete comment. Please try again.');
+            this.showStatus(`Could not delete comment: ${this.getErrorMessage(error)}`, 'error');
+        } finally {
+            this.pendingMutations.delete(operation);
+            if (button?.isConnected) button.disabled = false;
         }
     }
 
-    async toggleMinimizeComment(id) {
+    async toggleMinimizeComment(id, commentElement) {
+        const operation = `resolve:${id}`;
+        if (this.pendingMutations.has(operation)) return;
+        this.pendingMutations.add(operation);
+        const button = commentElement?.querySelector('.minimize-button');
+        if (button) button.disabled = true;
         try {
             const result = await api.toggleMinimizeComment(id);
             const index = this.comments.findIndex(c => c.id === id);
@@ -297,9 +331,13 @@ export class App {
                 this.comments[index] = result.comment;
             }
             this.updateViews();
+            this.showStatus(result.comment.is_minimized ? 'Comment resolved.' : 'Comment reopened.', 'success');
         } catch (error) {
             console.error('Failed to toggle minimize comment:', error);
-            alert('Failed to toggle minimize. Please try again.');
+            this.showStatus(`Could not update comment status: ${this.getErrorMessage(error)}`, 'error');
+        } finally {
+            this.pendingMutations.delete(operation);
+            if (button?.isConnected) button.disabled = false;
         }
     }
 
@@ -311,7 +349,10 @@ export class App {
             true
         );
 
-        if (positions.length === 0) return;
+        if (positions.length === 0) {
+            this.updateCommentNavigation();
+            return;
+        }
 
         // Find current index
         let currentIndex = -1;
@@ -346,6 +387,46 @@ export class App {
         }
 
         this.lastNavigatedCommentId = target.id;
+        this.updateCommentNavigation();
+    }
+
+    updateCommentNavigation() {
+        const commentsByFile = getCommentsByFile(this.comments);
+        const positions = getCommentPositions(Array.from(this.filesMap.values()), commentsByFile, true);
+        const count = positions.length;
+
+        this.prevCommentBtn.disabled = count === 0;
+        this.nextCommentBtn.disabled = count === 0;
+        if (count === 0) {
+            this.lastNavigatedCommentId = null;
+            this.commentNavStatus.textContent = 'No comments';
+            return;
+        }
+
+        const currentIndex = positions.findIndex(position => position.id === this.lastNavigatedCommentId);
+        if (currentIndex === -1) {
+            this.lastNavigatedCommentId = null;
+            this.commentNavStatus.textContent = `${count} ${count === 1 ? 'comment' : 'comments'}`;
+            return;
+        }
+        this.commentNavStatus.textContent = `Comment ${currentIndex + 1} of ${count}`;
+    }
+
+    showStatus(message, type = 'info') {
+        if (!this.appStatus) return;
+        clearTimeout(this.statusTimer);
+        this.appStatus.hidden = false;
+        this.appStatus.className = `app-status ${type}`;
+        this.appStatus.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        this.appStatus.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+        this.appStatus.textContent = message;
+        this.statusTimer = setTimeout(() => {
+            this.appStatus.hidden = true;
+        }, type === 'error' ? 8000 : 4000);
+    }
+
+    getErrorMessage(error) {
+        return error instanceof Error && error.message ? error.message : 'Please try again.';
     }
 
     updateViews() {
@@ -355,6 +436,7 @@ export class App {
         // Update only current file's comments in DiffView
         const currentPath = this.diffView.selectedFile;
         const commentsByFile = getCommentsByFile(this.comments);
+        this.updateCommentNavigation();
         if (currentPath === '__general__') {
             this.diffView.setGlobalComments(commentsByFile['__general__'] || []);
         } else if (currentPath) {
