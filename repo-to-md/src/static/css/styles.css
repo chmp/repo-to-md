@@ -334,7 +334,8 @@ diff-view {
 
 .diff-line-inner {
     padding: 0 8px;
-    white-space: pre;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     overflow-x: hidden;
     display: block;
 }
