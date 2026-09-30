@@ -1,5 +1,7 @@
+use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
 use argh::FromArgs;
@@ -23,6 +25,10 @@ pub struct ReviewFormatCommand {
     /// PR number or existing local comments JSON file
     #[argh(positional)]
     pub pr_or_file: Option<PathBuf>,
+
+    /// format the most recently modified local review session
+    #[argh(switch)]
+    pub local: bool,
 
     /// repository name (auto-detected from git remote if not provided)
     #[argh(option)]
@@ -53,9 +59,18 @@ impl ReviewFormatCommand {
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch),
         writer: &mut impl Write,
     ) -> Result<()> {
-        let comments = if self.should_format_local_review() {
+        let local_comments_path = if self.local {
+            self.ensure_valid_local_selector()?;
+            Some(latest_local_session(Path::new(".review-comments"))?)
+        } else if self.should_format_local_review() {
             self.ensure_no_remote_options_for_local_format()?;
-            self.fetch_local_comments()?
+            self.pr_or_file.clone()
+        } else {
+            None
+        };
+
+        let comments = if let Some(path) = local_comments_path {
+            self.fetch_local_comments(&path)?
         } else {
             let review_id = self.get_review_id(client, repository)?;
             client.fetch_review_comments(&review_id)?
@@ -73,7 +88,7 @@ impl ReviewFormatCommand {
     }
 
     pub fn check_requirements(&self) -> Result<()> {
-        if self.should_format_local_review() {
+        if self.local || self.should_format_local_review() {
             return Ok(());
         }
         check_executable("gh")?;
@@ -90,15 +105,11 @@ impl ReviewFormatCommand {
     }
 
     fn should_format_local_review(&self) -> bool {
-        !self.remote && self.pr_or_file.as_ref().is_some_and(|path| path.exists())
+        !self.local && !self.remote && self.pr_or_file.as_ref().is_some_and(|path| path.exists())
     }
 
-    fn fetch_local_comments(self) -> Result<Vec<Comment>> {
-        let comments_file = self
-            .pr_or_file
-            .unwrap_or_else(|| PathBuf::from("review-comments.json"));
-
-        let comments_file_content = CommentsFile::from_path(&comments_file).context(format!(
+    fn fetch_local_comments(&self, comments_file: &Path) -> Result<Vec<Comment>> {
+        let comments_file_content = CommentsFile::from_path(comments_file).context(format!(
                 "Failed to open comments file: {path}. Please run `repo-to-md review local` to create one",
                 path = comments_file.display(),
             ))?;
@@ -129,6 +140,21 @@ impl ReviewFormatCommand {
         if self.repo.is_some() || self.review.is_some() || self.author.is_some() || self.remote {
             bail!(
                 "Cannot combine local review formatting with remote review options such as --repo, --review, --author, or --remote"
+            );
+        }
+
+        Ok(())
+    }
+
+    fn ensure_valid_local_selector(&self) -> Result<()> {
+        if self.pr_or_file.is_some()
+            || self.repo.is_some()
+            || self.review.is_some()
+            || self.author.is_some()
+            || self.remote
+        {
+            bail!(
+                "Cannot combine --local with a positional argument or remote review options such as --repo, --review, --author, or --remote"
             );
         }
 
@@ -246,6 +272,61 @@ impl ReviewFormatCommand {
     }
 }
 
+fn latest_local_session(directory: &Path) -> Result<PathBuf> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            bail!(
+                "No local review sessions found in '{path}'. Run `repo-to-md review local` first.",
+                path = directory.display()
+            );
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "Failed to read local review sessions from '{path}'",
+                    path = directory.display()
+                )
+            });
+        }
+    };
+
+    let mut newest: Option<(SystemTime, PathBuf)> = None;
+    for entry in entries {
+        let entry = entry.with_context(|| {
+            format!(
+                "Failed to read an entry in '{path}'",
+                path = directory.display()
+            )
+        })?;
+        if !entry.file_type()?.is_file() || entry.path().extension().is_none_or(|ext| ext != "json")
+        {
+            continue;
+        }
+
+        let path = entry.path();
+        let modified = entry.metadata()?.modified().with_context(|| {
+            format!(
+                "Failed to read modification time for '{path}'",
+                path = path.display()
+            )
+        })?;
+        let is_newer = newest.as_ref().is_none_or(|(current_time, current_path)| {
+            modified > *current_time || (modified == *current_time && path > *current_path)
+        });
+        if is_newer {
+            newest = Some((modified, path));
+        }
+    }
+
+    newest.map(|(_, path)| path).ok_or_else(|| {
+        anyhow::anyhow!(
+            "No local review sessions found in '{path}'. Run `repo-to-md review local` first.",
+            path = directory.display()
+        )
+    })
+}
+
 fn parse_review_id_or_index(s: &str) -> ReviewIdOrIndex<'_> {
     if let Ok(index) = s.parse::<i32>() {
         ReviewIdOrIndex::Index(index)
@@ -305,6 +386,8 @@ pub(crate) fn select_review_by_index<'a>(reviews: &[&'a Review], index: i32) -> 
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use tempfile::NamedTempFile;
 
     use crate::{
@@ -398,6 +481,29 @@ mod tests {
         let review_refs: Vec<&Review> = reviews.iter().collect();
 
         assert!(select_review_by_index(&review_refs, 1).is_err());
+    }
+
+    #[test]
+    fn latest_local_session_reports_when_none_exist() {
+        let directory = tempfile::tempdir().unwrap();
+
+        let error = latest_local_session(directory.path()).unwrap_err();
+
+        assert!(error.to_string().contains("No local review sessions found"));
+        assert!(error.to_string().contains("repo-to-md review local"));
+    }
+
+    #[test]
+    fn latest_local_session_selects_most_recent_json_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let older = directory.path().join("z-older.json");
+        let newer = directory.path().join("a-newer.json");
+        std::fs::write(&older, "{}").unwrap();
+        std::thread::sleep(Duration::from_millis(30));
+        std::fs::write(&newer, "{}").unwrap();
+        std::fs::write(directory.path().join("ignored.txt"), "").unwrap();
+
+        assert_eq!(latest_local_session(directory.path()).unwrap(), newer);
     }
 
     #[test]

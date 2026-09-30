@@ -122,6 +122,7 @@ cargo run -- review format --author <USERNAME>
 cargo run -- review format <PR_NUMBER> --author <USERNAME> --review -1
 cargo run -- review format --author @me
 cargo run -- review format <PR_NUMBER> --author @me --review -1
+cargo run -- review format --local
 ```
 
 Fetch issues:
@@ -154,12 +155,14 @@ main, then master).
 
 The command refuses to start if:
 - There are uncommitted changes and reviewing HEAD (use `--force` to override)
-- The session file exists but has changed commits/refs (use `--force` to regenerate)
+- An explicit `-o` session file exists but has changed commits/refs (use `--force` to regenerate)
 - No commits exist in the range
 
-Comments are saved to `review-comments.json` by default (use `-o` to change).
-Browser opens automatically by default (use `--no-open` to disable). The session
-file tracks commits so reopening detects if the branch has changed.
+Sessions are saved under `.review-comments/`, keyed by the resolved base and
+end commit SHAs. Reopening the same range resumes its session, while a changed
+range gets a separate session file. The directory's `.gitignore` excludes the
+generated JSON files. Use `-o` to override the session path. Browser opens
+automatically by default (use `--no-open` to disable).
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
@@ -171,15 +174,22 @@ The server can be stopped by:
 
 On shutdown, the server prints the `review format` command to run next.
 
-Format comments as markdown:
+Format the most recently modified local session as markdown:
 
 ```bash
-cargo run -- review format review-comments.json     # Format specific file to stdout
+cargo run -- review format --local
+```
+
+Format an explicit comments file as markdown, including a legacy root file:
+
+```bash
+cargo run -- review format .review-comments/<base-sha>-<end-sha>.json
+cargo run -- review format review-comments.json
 ```
 
 When the positional argument names an existing path, `review format` treats it as
 a local comments file. Otherwise it is treated as a GitHub review ID or review
-index.
+index. With no arguments, `review format` keeps its remote review behavior.
 
 ### Install skill
 

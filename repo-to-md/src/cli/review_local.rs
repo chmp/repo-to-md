@@ -1,4 +1,6 @@
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -31,13 +33,9 @@ pub struct ReviewLocalCommand {
     #[argh(option)]
     pub bind: Option<String>,
 
-    /// JSON file path for comment persistence (default: review-comments.json)
-    #[argh(
-        option,
-        short = 'o',
-        default = "PathBuf::from(\"review-comments.json\")"
-    )]
-    pub output: PathBuf,
+    /// JSON file path for comment persistence (default: .review-comments/<base-sha>-<end-sha>.json)
+    #[argh(option, short = 'o')]
+    pub output: Option<PathBuf>,
 
     /// do not open browser automatically
     #[argh(switch)]
@@ -74,7 +72,11 @@ impl ReviewLocalCommand {
         }
 
         let refspec = RefSpec::parse(&base, &end)?.resolve()?;
-        let raw_diff = validate_and_prepare_session(&self.output, &refspec, self.force)?;
+        let comments_path = match self.output.as_ref() {
+            Some(path) => path.clone(),
+            None => default_comments_path(&refspec)?,
+        };
+        let raw_diff = validate_and_prepare_session(&comments_path, &refspec, self.force)?;
 
         let diff = SideBySideDiff::parse(&raw_diff)?;
 
@@ -85,7 +87,7 @@ impl ReviewLocalCommand {
             end = refspec.end_ref
         );
         eprintln!("  Port: {port}");
-        eprintln!("  Comments file: {path}", path = self.output.display());
+        eprintln!("  Comments file: {path}", path = comments_path.display());
 
         let should_open = !self.no_open;
 
@@ -93,7 +95,7 @@ impl ReviewLocalCommand {
             .context("Failed to create tokio runtime")?
             .block_on(async {
                 let server =
-                    local::bind_server(refspec, port, self.output, diff, raw_diff, &bind).await?;
+                    local::bind_server(refspec, port, comments_path, diff, raw_diff, &bind).await?;
 
                 if should_open {
                     open_url(server.url());
@@ -128,6 +130,56 @@ impl ReviewLocalCommand {
             format!("Failed to parse {PORT_ENV}={port:?} as a valid TCP port number")
         })
     }
+}
+
+fn default_comments_path(refspec: &RefSpec) -> Result<PathBuf> {
+    default_comments_path_in(Path::new(".review-comments"), refspec)
+}
+
+fn default_comments_path_in(directory: &Path, refspec: &RefSpec) -> Result<PathBuf> {
+    fs::create_dir_all(directory).with_context(|| {
+        format!(
+            "Failed to create local review session directory '{path}'",
+            path = directory.display()
+        )
+    })?;
+
+    let gitignore_path = directory.join(".gitignore");
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&gitignore_path)
+    {
+        Ok(mut file) => file.write_all(b"*.json\n").with_context(|| {
+            format!("Failed to write '{path}'", path = gitignore_path.display())
+        })?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let contents = fs::read_to_string(&gitignore_path).with_context(|| {
+                format!("Failed to read '{path}'", path = gitignore_path.display())
+            })?;
+            if !contents.lines().any(|line| line.trim() == "*.json") {
+                let mut file = OpenOptions::new()
+                    .append(true)
+                    .open(&gitignore_path)
+                    .with_context(|| {
+                        format!("Failed to update '{path}'", path = gitignore_path.display())
+                    })?;
+                if !contents.is_empty() && !contents.ends_with('\n') {
+                    file.write_all(b"\n")?;
+                }
+                file.write_all(b"*.json\n").with_context(|| {
+                    format!("Failed to update '{path}'", path = gitignore_path.display())
+                })?;
+            }
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!("Failed to create '{path}'", path = gitignore_path.display())
+            });
+        }
+    }
+
+    Ok(directory.join(format!("{}-{}.json", refspec.start_sha, refspec.end_sha)))
 }
 
 fn open_url(url: &str) {
@@ -207,6 +259,8 @@ fn validate_and_prepare_session(
 mod tests {
     use std::sync::Mutex;
 
+    use tempfile::tempdir;
+
     use super::*;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -264,12 +318,76 @@ mod tests {
         set_env(PORT_ENV, None);
     }
 
+    #[test]
+    fn default_session_paths_are_keyed_by_commit_shas_and_ignored() {
+        let directory = tempdir().unwrap();
+        let first_refspec = test_refspec("base-a", "end-a");
+        let matching_refspec = test_refspec("base-a", "end-a");
+        let changed_refspec = test_refspec("base-a", "end-b");
+
+        let first_path = default_comments_path_in(directory.path(), &first_refspec).unwrap();
+        let matching_path = default_comments_path_in(directory.path(), &matching_refspec).unwrap();
+        let changed_path = default_comments_path_in(directory.path(), &changed_refspec).unwrap();
+
+        assert_eq!(first_path, matching_path);
+        assert_ne!(first_path, changed_path);
+        assert_eq!(
+            fs::read_to_string(directory.path().join(".gitignore")).unwrap(),
+            "*.json\n"
+        );
+    }
+
+    #[test]
+    fn default_session_path_adds_ignore_rule_to_existing_gitignore() {
+        let directory = tempdir().unwrap();
+        fs::write(directory.path().join(".gitignore"), "# local review data\n").unwrap();
+
+        default_comments_path_in(directory.path(), &test_refspec("base", "end")).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(directory.path().join(".gitignore")).unwrap(),
+            "# local review data\n*.json\n"
+        );
+    }
+
+    #[test]
+    fn matching_default_session_reuses_stored_diff() {
+        let directory = tempdir().unwrap();
+        let refspec = test_refspec("base-sha", "end-sha");
+        let comments_path = default_comments_path_in(directory.path(), &refspec).unwrap();
+        let stored_file = CommentsFile {
+            version: 1,
+            start_ref: "HEAD".to_string(),
+            start_sha: "base-sha".to_string(),
+            end_ref: "HEAD".to_string(),
+            end_sha: "end-sha".to_string(),
+            raw_diff: "stored diff".to_string(),
+            comments: Vec::new(),
+            viewed_files: Vec::new(),
+        };
+        serde_json::to_writer(fs::File::create(&comments_path).unwrap(), &stored_file).unwrap();
+
+        assert_eq!(
+            validate_and_prepare_session(&comments_path, &refspec, false).unwrap(),
+            "stored diff"
+        );
+    }
+
+    fn test_refspec(start_sha: &str, end_sha: &str) -> RefSpec {
+        RefSpec {
+            start_ref: "HEAD".to_string(),
+            end_ref: "HEAD".to_string(),
+            start_sha: start_sha.to_string(),
+            end_sha: end_sha.to_string(),
+        }
+    }
+
     fn test_command() -> ReviewLocalCommand {
         ReviewLocalCommand {
             refs: Vec::new(),
             port: None,
             bind: None,
-            output: PathBuf::from("review-comments.json"),
+            output: None,
             no_open: false,
             force: false,
         }

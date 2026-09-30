@@ -121,4 +121,30 @@ mod tests {
 
         assert_eq!(local.refs, vec![String::from("main")]);
     }
+
+    #[test]
+    fn parse_review_format_local_switch() {
+        let cmd =
+            ReviewCommand::from_args(&["repo-to-md", "review"], &["format", "--local"]).unwrap();
+        let ReviewSubcommand::Format(format) = cmd.command else {
+            panic!("expected review format command");
+        };
+
+        assert!(format.local);
+        assert_eq!(format.pr_or_file, None);
+    }
+
+    #[test]
+    fn parse_review_local_output_override() {
+        let cmd = ReviewCommand::from_args(
+            &["repo-to-md", "review"],
+            &["local", "-o", "custom-session.json"],
+        )
+        .unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert_eq!(local.output, Some(PathBuf::from("custom-session.json")));
+    }
 }

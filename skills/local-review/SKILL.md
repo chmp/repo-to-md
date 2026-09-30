@@ -1,6 +1,6 @@
 ---
 name: local-review-comments
-description: Retrieves local review comments from the review-comments.json file and formats them as markdown for LLM consumption. Use when the user asks to address local review comments or feedback.
+description: Retrieves comments from a local review session and formats them as markdown for LLM consumption. Use when the user asks to address local review comments or feedback.
 ---
 
 # Retrieving local review comments
@@ -11,16 +11,16 @@ markdown.
 ## Primary usage
 
 ```bash
-repo-to-md review format review-comments.json
+repo-to-md review format --local
 ```
 
-This reads `review-comments.json` from the current directory and outputs
-markdown to stdout.
+This selects the most recently modified session in `.review-comments/` and
+outputs markdown to stdout.
 
 ## Prerequisites
 
-- A `review-comments.json` file must exist (created by `repo-to-md review local`)
-- The file contains comments from a local review session
+- A local review session must exist (created by `repo-to-md review local`)
+- Sessions are stored as SHA-keyed JSON files in `.review-comments/`
 
 ## Alternative usage
 
@@ -32,6 +32,8 @@ repo-to-md review format path/to/comments.json
 
 The comments argument must point to an existing file. Otherwise `review format`
 interprets the positional argument as a GitHub review ID or review index.
+This also supports the legacy root `review-comments.json` path and paths passed
+to `repo-to-md review local -o`.
 
 ## Output format
 

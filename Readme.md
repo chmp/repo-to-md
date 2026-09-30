@@ -95,6 +95,7 @@ repo-to-md review format                               # Last review on current 
 repo-to-md review format --author @me                  # Filter by author
 repo-to-md review format --repo owner/repo             # Override repository
 repo-to-md review format --remote review-comments.json # Force remote lookup
+repo-to-md review format --local                      # Most recently modified local session
 ```
 
 For all available options, run `repo-to-md review format --help`.
@@ -130,9 +131,11 @@ repo-to-md review local main feature       # Review commits from main to feature
 This launches a local web server with a side-by-side diff viewer where you can
 add comments to the changes. The command reviews a range of commits (base..end)
 and refuses to start if there are uncommitted changes when reviewing HEAD (use
-`--force` to override). Comments are persisted to `review-comments.json` (use
-`-o` to change). The diff and commit list are also persisted, so reopening the
-session detects if commits have changed.
+`--force` to override). Sessions are persisted under `.review-comments/`, with
+one JSON file per base and end commit SHA. Reopening the same commit range
+resumes its session; a different range gets a separate session. The directory
+contains a `.gitignore` so generated session files stay out of Git. Use `-o` to
+save to a specific JSON path instead.
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
@@ -140,15 +143,24 @@ arguments take precedence over the environment.
 
 For all available options, run `repo-to-md review local --help`.
 
-The comments from a local review session can be exported to markdown by running:
+The most recently modified local session can be exported to markdown by running:
 
 ```bash
+repo-to-md review format --local
+```
+
+You can also pass a local comments file explicitly, including a legacy root
+`review-comments.json` file or a path supplied with `review local -o`:
+
+```bash
+repo-to-md review format .review-comments/<base-sha>-<end-sha>.json
 repo-to-md review format review-comments.json
 ```
 
-When the positional argument names an existing path, `review format` treats it as
-a local comments file. Otherwise it is treated as a GitHub review ID or review
-index. To customize the review comments or the output to a file use
+When the positional argument names an existing path, `review format` treats it
+as a local comments file. Otherwise it is treated as a GitHub review ID or
+review index. With no arguments, `review format` keeps its remote review
+behavior.
 
 ## How it works
 

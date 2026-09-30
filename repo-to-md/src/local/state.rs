@@ -62,9 +62,10 @@ impl AppState {
         diff: SideBySideDiff<'static>,
         raw_diff: String,
     ) -> Result<Arc<Self>> {
+        let is_new_session = !comments_file_path.exists();
         let (comments, viewed_files, mtime) = Self::load_comments(&comments_file_path)?;
 
-        Ok(Arc::new(AppState {
+        let state = Arc::new(AppState {
             refspec,
             comments_file_path,
             comments: RwLock::new(comments),
@@ -72,7 +73,13 @@ impl AppState {
             diff,
             raw_diff,
             file_mtime: RwLock::new(mtime),
-        }))
+        });
+
+        if is_new_session {
+            state.save_comments()?;
+        }
+
+        Ok(state)
     }
 
     fn load_comments(path: &PathBuf) -> Result<(Vec<Comment>, Vec<String>, Option<SystemTime>)> {
@@ -240,7 +247,10 @@ impl AppState {
 
 fn atomic_write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     // Write to temp file in same directory (for atomic rename)
-    let parent = path.parent().unwrap_or(Path::new("."));
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     let temp_file = NamedTempFile::new_in(parent).context("Failed to create temp file for save")?;
 
     // Serialize directly to file
@@ -253,4 +263,37 @@ fn atomic_write_json(path: &Path, value: &impl Serialize) -> Result<()> {
         .context("Failed to save comments file")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn new_state_persists_initial_session() {
+        let directory = tempdir().unwrap();
+        let comments_file_path = directory.path().join("session.json");
+        let refspec = RefSpec {
+            start_ref: "base".to_string(),
+            end_ref: "end".to_string(),
+            start_sha: "base-sha".to_string(),
+            end_sha: "end-sha".to_string(),
+        };
+
+        AppState::new(
+            refspec,
+            comments_file_path.clone(),
+            SideBySideDiff::parse("").unwrap(),
+            "raw diff snapshot".to_string(),
+        )
+        .unwrap();
+
+        let saved = CommentsFile::from_path(&comments_file_path).unwrap();
+        assert_eq!(saved.start_sha, "base-sha");
+        assert_eq!(saved.end_sha, "end-sha");
+        assert_eq!(saved.raw_diff, "raw diff snapshot");
+        assert!(saved.comments.is_empty());
+    }
 }
