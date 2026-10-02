@@ -30,9 +30,10 @@ Specify a different comments file:
 repo-to-md review format path/to/comments.json
 ```
 
-The comments argument must point to an existing file. Otherwise `review format`
-interprets the positional argument as a GitHub review ID or review index.
-This also supports paths passed to `repo-to-md review local -o`.
+The comments argument must point to an existing file. A positional argument
+that does not name a file is treated as a pull request number; select a remote
+review by ID or index with `--review`. This also supports paths passed to
+`repo-to-md review local -o`.
 
 ## Output format
 

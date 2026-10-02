@@ -42,7 +42,7 @@ pub struct ReviewFormatCommand {
     #[argh(option)]
     pub author: Option<String>,
 
-    /// treat the positional argument as a remote review even if a matching file exists
+    /// interpret the positional argument as a PR number even if a matching file exists
     #[argh(switch)]
     pub remote: bool,
 }

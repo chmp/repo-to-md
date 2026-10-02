@@ -129,12 +129,14 @@ repo-to-md review local main feature       # Review commits from main to feature
 
 This launches a local web server with a side-by-side diff viewer where you can
 add comments to the changes. The command reviews a range of commits (base..end)
-and refuses to start if there are uncommitted changes when reviewing HEAD (use
-`--force` to override). Sessions are persisted under `.review-comments/`, with
-one JSON file per base and end commit SHA. Reopening the same commit range
-resumes its session; a different range gets a separate session. The directory
-contains a `.gitignore` so generated session files stay out of Git. Use `-o` to
-save to a specific JSON path instead.
+and refuses to start if there are uncommitted changes when HEAD is the end ref.
+Use `--force` to proceed in that case. Sessions are persisted under
+`.review-comments/`, with one JSON file per base and end commit SHA. Reopening
+the same commit range resumes its session; a different range gets a separate
+session. The directory contains a `.gitignore` so generated session files stay
+out of Git. Use `-o` to save to a specific JSON path instead. If that path
+already contains a session for a different range, `--force` replaces it and
+discards its comments.
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
@@ -157,9 +159,9 @@ repo-to-md review format path/to/comments.json
 ```
 
 When the positional argument names an existing path, `review format` treats it
-as a local comments file. Otherwise it is treated as a GitHub review ID or
-review index. With no arguments, `review format` keeps its remote review
-behavior.
+as a local comments file unless `--remote` is set. Otherwise it is treated as a
+PR number. Use `--review` to choose a specific review by ID or index. With no
+arguments, `review format` keeps its remote review behavior.
 
 ## How it works
 

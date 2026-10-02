@@ -19,7 +19,7 @@ const PORT_ENV: &str = "REPO_TO_MD_PORT";
 #[derive(FromArgs)]
 #[argh(subcommand, name = "local")]
 pub struct ReviewLocalCommand {
-    /// base git ref to compare against (auto-detected if not provided)
+    /// base ref and optional end ref; auto-detect base and use HEAD when omitted (max two refs)
     #[argh(positional)]
     pub refs: Vec<String>,
 
@@ -39,7 +39,7 @@ pub struct ReviewLocalCommand {
     #[argh(switch)]
     pub no_open: bool,
 
-    /// force regeneration of session even if refs have changed or working directory is dirty
+    /// allow a dirty working tree when end defaults to HEAD; replace mismatched -o sessions, discarding comments
     #[argh(switch)]
     pub force: bool,
 }
@@ -54,7 +54,7 @@ impl ReviewLocalCommand {
             [base] => (base.clone(), String::from("HEAD")),
             [base, end] => (base.clone(), end.clone()),
             args => bail!(
-                "Invalid call cannot pass more than two refs, got {len}",
+                "Expected at most a base ref and an end ref, got {len} refs",
                 len = args.len()
             ),
         };
@@ -232,6 +232,27 @@ mod tests {
     use super::*;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn rejects_more_than_two_refs_with_a_clear_error() {
+        let command = ReviewLocalCommand {
+            refs: vec![
+                String::from("base"),
+                String::from("end"),
+                String::from("extra"),
+            ],
+            port: Some(DEFAULT_PORT),
+            bind: Some(DEFAULT_BIND.to_string()),
+            ..test_command()
+        };
+
+        let error = command.run().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Expected at most a base ref and an end ref")
+        );
+    }
 
     #[test]
     fn bind_address_prefers_cli() {

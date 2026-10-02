@@ -144,7 +144,7 @@ cargo run -- review local main               # Review commits from main to HEAD
 cargo run -- review local main feature       # Review commits from main to feature
 cargo run -- review local HEAD~5 HEAD~2      # Review specific commit range
 cargo run -- review local main --no-open     # Don't open browser automatically
-cargo run -- review local --force            # Force regeneration even with uncommitted changes
+cargo run -- review local --force            # Allow dirty HEAD review or replace mismatched -o session
 ```
 
 The `review local` command launches a local web server with a side-by-side diff
@@ -155,7 +155,7 @@ main, then master).
 
 The command refuses to start if:
 - There are uncommitted changes and reviewing HEAD (use `--force` to override)
-- An explicit `-o` session file exists but has changed commits/refs (use `--force` to regenerate)
+- An explicit `-o` session file exists but has changed commits/refs (use `--force` to replace it and discard its comments)
 - No commits exist in the range
 
 Sessions are saved under `.review-comments/`, keyed by the resolved base and
@@ -188,8 +188,9 @@ cargo run -- review format path/to/comments.json
 ```
 
 When the positional argument names an existing path, `review format` treats it as
-a local comments file. Otherwise it is treated as a GitHub review ID or review
-index. With no arguments, `review format` keeps its remote review behavior.
+a local comments file unless `--remote` is set. Otherwise it is treated as a PR
+number. Use `--review` to choose a specific review by ID or index. With no
+arguments, `review format` keeps its remote review behavior.
 
 ### Install skill
 
@@ -323,12 +324,14 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
    - Display review table with author, date, comment count, and description
    - User selects review by number
    - Fetch comments from selected review via GraphQL (`fetch_review_comments`)
-2. **Direct mode** (review ID positional provided):
-   - Fetch comments from specified review via GraphQL
-3. **File mode** (`--json-file` provided):
-   - Read comments from local JSON file
-4. Group comments by file path
-5. Format as markdown code blocks with inline comments
+2. **Direct mode** (`--review <REVIEW_ID>` provided):
+   - Fetch comments from the specified review via GraphQL
+3. **Index mode** (`--review <INDEX>` provided):
+   - List reviews and fetch comments from the selected review
+4. **File mode** (an existing comments file is passed positionally):
+   - Read comments from the local JSON file
+5. Group comments by file path
+6. Format as markdown code blocks with inline comments
 
 **GitHub GraphQL API (client/):**
 

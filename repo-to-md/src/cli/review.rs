@@ -123,6 +123,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_review_local_accepts_an_optional_end_ref() {
+        let cmd =
+            ReviewCommand::from_args(&["repo-to-md", "review"], &["local", "main", "feature"])
+                .unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert_eq!(
+            local.refs,
+            vec![String::from("main"), String::from("feature")]
+        );
+    }
+
+    #[test]
     fn parse_review_format_local_switch() {
         let cmd =
             ReviewCommand::from_args(&["repo-to-md", "review"], &["format", "--local"]).unwrap();
