@@ -36,7 +36,7 @@ pub struct ReviewLocalCommand {
     #[argh(option, short = 'o')]
     pub output: Option<PathBuf>,
 
-    /// continue from a previous local review session JSON file
+    /// continue from a previous local review session JSON file, using its saved diff or SHAs
     #[argh(option)]
     pub from: Option<PathBuf>,
 
@@ -59,7 +59,64 @@ impl ReviewLocalCommand {
         let port = self.port()?;
         let input = self.review_input()?;
 
-        let (refspec, comments_path, raw_diff, title, parsed_diff) = match input {
+        let (refspec, comments_path, raw_diff, title, parsed_diff, session_seed) = match input {
+            ReviewInput::FromSession(source_path) => {
+                let source = CommentsFile::from_path(&source_path).with_context(|| {
+                    format!(
+                        "Failed to load source review session '{path}'",
+                        path = source_path.display()
+                    )
+                })?;
+                let raw_diff = raw_diff_from_session(&source)?;
+                let source_bytes = fs::read(&source_path).with_context(|| {
+                    format!(
+                        "Failed to read source review session '{path}'",
+                        path = source_path.display()
+                    )
+                })?;
+                let source_id = git_blob_id(source_bytes.as_slice())?;
+                let refspec = RefSpec {
+                    start_ref: source.start_ref.clone(),
+                    end_ref: source.end_ref.clone(),
+                    start_sha: source.start_sha.clone(),
+                    end_sha: source.end_sha.clone(),
+                };
+                let comments_path = match self.output.as_ref() {
+                    Some(path) => path.clone(),
+                    None => default_continued_comments_path_in(
+                        Path::new(".review-comments"),
+                        &source_id,
+                    )?,
+                };
+                if comments_path.exists() && same_existing_file(&source_path, &comments_path) {
+                    bail!(
+                        "The --from source and output session must be different files; choose a new output path with -o"
+                    );
+                }
+                let (raw_diff, session_seed) = prepare_continued_session(
+                    &comments_path,
+                    &refspec,
+                    raw_diff,
+                    SessionSeed {
+                        comments: source.comments,
+                        viewed_files: source.viewed_files,
+                    },
+                )?;
+                if let Some(seed) = session_seed.as_ref() {
+                    eprintln!(
+                        "Continuing review with {count} comments and {viewed_count} viewed files from '{path}'",
+                        count = seed.comments.len(),
+                        viewed_count = seed.viewed_files.len(),
+                        path = source_path.display()
+                    );
+                }
+                let title = format!(
+                    "Previous review: {start_ref}..{end_ref}",
+                    start_ref = refspec.start_ref,
+                    end_ref = refspec.end_ref
+                );
+                (refspec, comments_path, raw_diff, title, None, session_seed)
+            }
             ReviewInput::Refs { base, end } => {
                 let refspec = RefSpec::parse(&base, &end)?.resolve()?;
 
@@ -76,7 +133,7 @@ impl ReviewLocalCommand {
                 };
                 let raw_diff = validate_and_prepare_session(&comments_path, &refspec)?;
                 let title = format!("Range: {base}..{end}");
-                (refspec, comments_path, raw_diff, title, None)
+                (refspec, comments_path, raw_diff, title, None, None)
             }
             ReviewInput::DiffFile(path) => {
                 let raw_diff = read_diff_file(&path)?;
@@ -96,7 +153,7 @@ impl ReviewLocalCommand {
                 let raw_diff =
                     validate_and_prepare_diff_session(&comments_path, &refspec, raw_diff)?;
                 let title = format!("Diff file: {source_path}");
-                (refspec, comments_path, raw_diff, title, Some(diff))
+                (refspec, comments_path, raw_diff, title, Some(diff), None)
             }
             ReviewInput::Commit(commit) => {
                 let refspec = review_commit_spec(&commit)?;
@@ -106,43 +163,13 @@ impl ReviewLocalCommand {
                 };
                 let raw_diff = validate_and_prepare_session(&comments_path, &refspec)?;
                 let title = format!("Commit: {commit} (against first parent)");
-                (refspec, comments_path, raw_diff, title, None)
+                (refspec, comments_path, raw_diff, title, None, None)
             }
         };
 
         let diff = match parsed_diff {
             Some(diff) => diff,
             None => SideBySideDiff::parse(&raw_diff)?,
-        };
-
-        let session_seed = match self.from.as_ref() {
-            Some(source_path) => {
-                if comments_path.exists() {
-                    bail!(
-                        "Cannot continue from '{source}' because the output session '{output}' already exists. Choose a new output path with -o.",
-                        source = source_path.display(),
-                        output = comments_path.display()
-                    );
-                }
-
-                let source = CommentsFile::from_path(source_path).with_context(|| {
-                    format!(
-                        "Failed to load comments from source review '{path}'",
-                        path = source_path.display()
-                    )
-                })?;
-                eprintln!(
-                    "Continuing review with {count} comments and {viewed_count} viewed files from '{path}'",
-                    count = source.comments.len(),
-                    viewed_count = source.viewed_files.len(),
-                    path = source_path.display()
-                );
-                Some(SessionSeed {
-                    comments: source.comments,
-                    viewed_files: source.viewed_files,
-                })
-            }
-            None => None,
         };
 
         eprintln!("Starting web UI for diff review...");
@@ -179,6 +206,16 @@ impl ReviewLocalCommand {
     }
 
     fn review_input(&self) -> Result<ReviewInput> {
+        if let Some(source_path) = self.from.as_ref() {
+            if !self.refs.is_empty() || self.diff.is_some() || self.commit.is_some() {
+                bail!(
+                    "--from cannot be combined with positional refs, --diff, or --commit; the source session supplies the diff"
+                );
+            }
+
+            return Ok(ReviewInput::FromSession(source_path.clone()));
+        }
+
         match (
             self.diff.as_ref(),
             self.commit.as_deref(),
@@ -235,6 +272,7 @@ impl ReviewLocalCommand {
 
 #[derive(Debug)]
 enum ReviewInput {
+    FromSession(PathBuf),
     Refs { base: String, end: String },
     DiffFile(PathBuf),
     Commit(String),
@@ -250,6 +288,12 @@ fn default_diff_comments_path_in(directory: &Path, blob_id: &str) -> Result<Path
     prepare_comments_directory(directory)?;
 
     Ok(directory.join(format!("diff-{blob_id}.json")))
+}
+
+fn default_continued_comments_path_in(directory: &Path, source_id: &str) -> Result<PathBuf> {
+    prepare_comments_directory(directory)?;
+
+    Ok(directory.join(format!("continued-{source_id}.json")))
 }
 
 fn prepare_comments_directory(directory: &Path) -> Result<()> {
@@ -300,10 +344,25 @@ fn generate_raw_diff(refspec: &RefSpec) -> Result<String> {
 
 fn generate_raw_diff_in(directory: &Path, refspec: &RefSpec) -> Result<String> {
     let diff_args = refspec.diff_args();
+    generate_raw_diff_with_args_in(directory, &diff_args)
+}
+
+fn generate_raw_diff_from_shas_in(
+    directory: &Path,
+    start_sha: &str,
+    end_sha: &str,
+) -> Result<String> {
+    validate_stored_sha(start_sha, "start")?;
+    validate_stored_sha(end_sha, "end")?;
+
+    generate_raw_diff_with_args_in(directory, &[start_sha.to_string(), end_sha.to_string()])
+}
+
+fn generate_raw_diff_with_args_in(directory: &Path, diff_args: &[String]) -> Result<String> {
     let output = Command::new("git")
         .arg("diff")
         .arg("--unified=3")
-        .args(&diff_args)
+        .args(diff_args)
         .current_dir(directory)
         .output()
         .context("Failed to execute git diff")?;
@@ -314,6 +373,66 @@ fn generate_raw_diff_in(directory: &Path, refspec: &RefSpec) -> Result<String> {
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn validate_stored_sha(sha: &str, label: &str) -> Result<()> {
+    let is_full_sha =
+        matches!(sha.len(), 40 | 64) && sha.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if !is_full_sha {
+        bail!(
+            "The source review has no saved diff and its {label} SHA is missing or invalid, so the diff cannot be regenerated"
+        );
+    }
+
+    Ok(())
+}
+
+fn raw_diff_from_session(source: &CommentsFile) -> Result<String> {
+    raw_diff_from_session_in(Path::new("."), source)
+}
+
+fn raw_diff_from_session_in(directory: &Path, source: &CommentsFile) -> Result<String> {
+    if !source.raw_diff.is_empty() {
+        eprintln!("Using the saved diff snapshot from the source review");
+        return Ok(source.raw_diff.clone());
+    }
+
+    eprintln!("Regenerating the source review diff from its stored SHAs...");
+    generate_raw_diff_from_shas_in(directory, &source.start_sha, &source.end_sha).context(
+        "Failed to regenerate the source review diff from its stored SHAs; the Git objects may be unavailable",
+    )
+}
+
+fn same_existing_file(first: &Path, second: &Path) -> bool {
+    fs::canonicalize(first)
+        .ok()
+        .zip(fs::canonicalize(second).ok())
+        .is_some_and(|(first, second)| first == second)
+}
+
+fn prepare_continued_session(
+    comments_path: &Path,
+    refspec: &RefSpec,
+    source_raw_diff: String,
+    session_seed: SessionSeed,
+) -> Result<(String, Option<SessionSeed>)> {
+    if !comments_path.exists() {
+        return Ok((source_raw_diff, Some(session_seed)));
+    }
+
+    let existing = CommentsFile::from_path(comments_path)?;
+    let is_matching = existing.start_sha == refspec.start_sha
+        && existing.end_sha == refspec.end_sha
+        && existing.raw_diff == source_raw_diff;
+    if is_matching {
+        eprintln!("Resuming the continued review session");
+        return Ok((existing.raw_diff, None));
+    }
+
+    bail!(
+        "Output session '{path}' already exists. Choose a different path with -o.",
+        path = comments_path.display()
+    );
 }
 
 fn read_diff_file(path: &Path) -> Result<String> {
@@ -921,6 +1040,104 @@ mod tests {
                 .to_string()
                 .contains("--commit cannot be combined with positional refs")
         );
+
+        let source_and_refs = ReviewLocalCommand {
+            from: Some(PathBuf::from("previous.json")),
+            refs: vec!["main".to_string()],
+            ..test_command()
+        };
+        assert!(
+            source_and_refs
+                .review_input()
+                .unwrap_err()
+                .to_string()
+                .contains("--from cannot be combined")
+        );
+    }
+
+    #[test]
+    fn source_session_prefers_saved_diff_snapshot() {
+        let directory = tempdir().unwrap();
+        let source = CommentsFile {
+            version: 1,
+            start_ref: "rewritten-base".to_string(),
+            start_sha: "not-a-sha".to_string(),
+            end_ref: "rewritten-head".to_string(),
+            end_sha: "also-not-a-sha".to_string(),
+            raw_diff: "saved diff snapshot".to_string(),
+            comments: Vec::new(),
+            viewed_files: Vec::new(),
+        };
+
+        assert_eq!(
+            raw_diff_from_session_in(directory.path(), &source).unwrap(),
+            "saved diff snapshot"
+        );
+    }
+
+    #[test]
+    fn source_session_regenerates_diff_from_stored_shas_when_missing() {
+        let directory = tempdir().unwrap();
+        run_git_in(
+            directory.path(),
+            &["init", "--quiet", "-b", "main"],
+            "Failed to init test repository",
+        )
+        .unwrap();
+        fs::write(directory.path().join("file.txt"), "before\n").unwrap();
+        create_test_commit(directory.path(), "base commit");
+        let start_sha = test_git(directory.path(), &["rev-parse", "HEAD"]);
+
+        fs::write(directory.path().join("file.txt"), "after\n").unwrap();
+        create_test_commit(directory.path(), "end commit");
+        let end_sha = test_git(directory.path(), &["rev-parse", "HEAD"]);
+
+        let source = CommentsFile {
+            version: 1,
+            start_ref: "deleted-base-ref".to_string(),
+            start_sha,
+            end_ref: "deleted-end-ref".to_string(),
+            end_sha,
+            raw_diff: String::new(),
+            comments: Vec::new(),
+            viewed_files: Vec::new(),
+        };
+
+        let raw_diff = raw_diff_from_session_in(directory.path(), &source).unwrap();
+        assert!(raw_diff.contains("-before"));
+        assert!(raw_diff.contains("+after"));
+    }
+
+    #[test]
+    fn matching_continued_session_resumes_without_reseeding() {
+        let directory = tempdir().unwrap();
+        let comments_path = directory.path().join("continued.json");
+        let refspec = test_refspec("base-sha", "end-sha");
+        let existing = CommentsFile {
+            version: 1,
+            start_ref: "main".to_string(),
+            start_sha: refspec.start_sha.clone(),
+            end_ref: "HEAD".to_string(),
+            end_sha: refspec.end_sha.clone(),
+            raw_diff: "saved diff".to_string(),
+            comments: Vec::new(),
+            viewed_files: Vec::new(),
+        };
+        serde_json::to_writer(fs::File::create(&comments_path).unwrap(), &existing).unwrap();
+
+        let (raw_diff, session_seed) = prepare_continued_session(
+            &comments_path,
+            &refspec,
+            "saved diff".to_string(),
+            SessionSeed {
+                comments: Vec::new(),
+                viewed_files: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(raw_diff, "saved diff");
+        assert!(session_seed.is_none());
     }
 
     fn test_refspec(start_sha: &str, end_sha: &str) -> RefSpec {
