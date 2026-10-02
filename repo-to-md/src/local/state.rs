@@ -62,8 +62,29 @@ impl AppState {
         diff: SideBySideDiff<'static>,
         raw_diff: String,
     ) -> Result<Arc<Self>> {
+        Self::new_with_initial_comments(refspec, comments_file_path, diff, raw_diff, None)
+    }
+
+    pub fn new_with_initial_comments(
+        refspec: RefSpec,
+        comments_file_path: PathBuf,
+        diff: SideBySideDiff<'static>,
+        raw_diff: String,
+        initial_comments: Option<Vec<Comment>>,
+    ) -> Result<Arc<Self>> {
         let is_new_session = !comments_file_path.exists();
-        let (comments, viewed_files, mtime) = Self::load_comments(&comments_file_path)?;
+        if initial_comments.is_some() && !is_new_session {
+            anyhow::bail!(
+                "Cannot seed comments because session '{path}' already exists",
+                path = comments_file_path.display()
+            );
+        }
+
+        let (comments, viewed_files, mtime) = if is_new_session {
+            (initial_comments.unwrap_or_default(), Vec::new(), None)
+        } else {
+            Self::load_comments(&comments_file_path)?
+        };
 
         let state = Arc::new(AppState {
             refspec,
@@ -270,6 +291,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+    use crate::client::User;
 
     #[test]
     fn new_state_persists_initial_session() {
@@ -295,5 +317,46 @@ mod tests {
         assert_eq!(saved.end_sha, "end-sha");
         assert_eq!(saved.raw_diff, "raw diff snapshot");
         assert!(saved.comments.is_empty());
+    }
+
+    #[test]
+    fn new_state_can_start_with_comments_from_another_review() {
+        let directory = tempdir().unwrap();
+        let comments_file_path = directory.path().join("new-session.json");
+        let refspec = RefSpec {
+            start_ref: "new-base".to_string(),
+            end_ref: "new-end".to_string(),
+            start_sha: "new-base-sha".to_string(),
+            end_sha: "new-end-sha".to_string(),
+        };
+        let initial_comments = vec![Comment {
+            id: "previous-comment".to_string(),
+            path: "src/lib.rs".to_string(),
+            line: Some(12),
+            body: "Carry this comment forward".to_string(),
+            diff_hunk: "@@ -10,1 +10,1 @@".to_string(),
+            user: User {
+                login: "reviewer".to_string(),
+            },
+            is_minimized: false,
+        }];
+
+        AppState::new_with_initial_comments(
+            refspec,
+            comments_file_path.clone(),
+            SideBySideDiff::parse("").unwrap(),
+            "new diff snapshot".to_string(),
+            Some(initial_comments),
+        )
+        .unwrap();
+
+        let saved = CommentsFile::from_path(&comments_file_path).unwrap();
+        assert_eq!(saved.comments.len(), 1);
+        assert_eq!(saved.comments[0].id, "previous-comment");
+        assert_eq!(saved.comments[0].body, "Carry this comment forward");
+        assert!(saved.viewed_files.is_empty());
+        assert_eq!(saved.start_sha, "new-base-sha");
+        assert_eq!(saved.end_sha, "new-end-sha");
+        assert_eq!(saved.raw_diff, "new diff snapshot");
     }
 }

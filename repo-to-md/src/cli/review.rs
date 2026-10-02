@@ -171,6 +171,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_review_local_source_comments() {
+        let cmd = ReviewCommand::from_args(
+            &["repo-to-md", "review"],
+            &["local", "main", "feature", "--from", "previous.json"],
+        )
+        .unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert_eq!(local.from, Some(PathBuf::from("previous.json")));
+    }
+
+    #[test]
     fn parse_review_local_diff_file_mode() {
         let cmd = ReviewCommand::from_args(
             &["repo-to-md", "review"],

@@ -36,6 +36,10 @@ pub struct ReviewLocalCommand {
     #[argh(option, short = 'o')]
     pub output: Option<PathBuf>,
 
+    /// seed a new review with comments from a previous session JSON file
+    #[argh(option)]
+    pub from: Option<PathBuf>,
+
     /// review an existing unified diff file (session keyed by its Git blob ID)
     #[argh(option)]
     pub diff: Option<PathBuf>,
@@ -111,6 +115,32 @@ impl ReviewLocalCommand {
             None => SideBySideDiff::parse(&raw_diff)?,
         };
 
+        let initial_comments = match self.from.as_ref() {
+            Some(source_path) => {
+                if comments_path.exists() {
+                    bail!(
+                        "Cannot seed from '{source}' because the output session '{output}' already exists. Choose a new output path with -o.",
+                        source = source_path.display(),
+                        output = comments_path.display()
+                    );
+                }
+
+                let source = CommentsFile::from_path(source_path).with_context(|| {
+                    format!(
+                        "Failed to load comments from source review '{path}'",
+                        path = source_path.display()
+                    )
+                })?;
+                eprintln!(
+                    "Seeding new review with {count} comments from '{path}'",
+                    count = source.comments.len(),
+                    path = source_path.display()
+                );
+                Some(source.comments)
+            }
+            None => None,
+        };
+
         eprintln!("Starting web UI for diff review...");
         eprintln!("  {title}");
         eprintln!("  Port: {port}");
@@ -121,8 +151,16 @@ impl ReviewLocalCommand {
         tokio::runtime::Runtime::new()
             .context("Failed to create tokio runtime")?
             .block_on(async {
-                let server =
-                    local::bind_server(refspec, port, comments_path, diff, raw_diff, &bind).await?;
+                let server = local::bind_server_with_initial_comments(
+                    refspec,
+                    port,
+                    comments_path,
+                    diff,
+                    raw_diff,
+                    initial_comments,
+                    &bind,
+                )
+                .await?;
 
                 if should_open {
                     open_url(server.url());
@@ -905,6 +943,7 @@ mod tests {
             port: None,
             bind: None,
             output: None,
+            from: None,
             diff: None,
             commit: None,
             no_open: false,

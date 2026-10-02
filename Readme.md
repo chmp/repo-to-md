@@ -127,6 +127,7 @@ repo-to-md review local main               # Review commits from main to HEAD
 repo-to-md review local main feature       # Review commits from main to feature
 repo-to-md review local --diff saved.patch  # Review a saved unified diff
 repo-to-md review local --commit HEAD~2     # Review one commit against its first parent
+repo-to-md review local main feature --from .review-comments/old-session.json
 ```
 
 This launches a local web server with a side-by-side diff viewer where you can
@@ -155,6 +156,11 @@ first parent. Its default session uses the same base and commit SHA naming as a
 commit range. `--diff` and `--commit` cannot be combined with each other or with
 positional refs. Server options such as `--bind`, `--port`, and `--no-open` work
 in either mode.
+
+Use `--from <path>` to start a new session with comments copied from an earlier
+local review JSON file. The new session uses the current diff and starts with no
+files marked as viewed. The output session must be new; if it already exists,
+choose another path with `-o` or resume it without `--from`.
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`

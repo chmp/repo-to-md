@@ -153,6 +153,7 @@ cargo run -- review local HEAD~5 HEAD~2      # Review specific commit range
 cargo run -- review local main --no-open     # Don't open browser automatically
 cargo run -- review local --diff change.patch # Review a saved unified diff
 cargo run -- review local --commit HEAD~2    # Review one commit against its first parent
+cargo run -- review local main feature --from .review-comments/old-session.json
 ```
 
 The `review local` command launches a local web server with a side-by-side diff
@@ -180,6 +181,11 @@ parent. The default session is keyed by the resolved base and commit SHAs.
 `--diff` and `--commit` are mutually exclusive and cannot be combined with
 positional refs. The server options (`--bind`, `--port`, and `--no-open`) remain
 available in either mode.
+
+`--from <path>` starts a new session with comments copied from an earlier local
+review JSON file. The new session uses the current diff and resets viewed-file
+progress. The output session must not already exist; choose a different `-o`
+path or resume the existing session without `--from`.
 
 Range sessions are saved under `.review-comments/`, keyed by the resolved base
 and end commit SHAs. Reopening the same range resumes its session, while a
