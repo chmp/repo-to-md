@@ -1,8 +1,9 @@
 use anyhow::Result;
 
 use super::chunk::{Chunk, ChunkParser};
-use super::diff_file_header::{DiffFileHeader, DiffFileHeaderParser};
-use super::parser::MultilineParser;
+use super::diff_file_header::{DiffFileHeader, DiffFileHeaderParser, is_binary_diff_marker};
+use super::diff_header::DiffHeaderParser;
+use super::parser::{LineParser, MultilineParser};
 
 /// The parsed diff for a single file.
 ///
@@ -34,12 +35,27 @@ impl<'a> MultilineParser<'a> for DiffFileParser {
         let Some((header, rest)) = DiffFileHeaderParser.parse_lines(lines)? else {
             return Ok(None);
         };
-        let (chunks, rest) = ChunkParser.parse_lines_many(rest)?;
+        let is_binary = rest.first().is_some_and(|line| is_binary_diff_marker(line));
+        let (chunks, rest) = if is_binary {
+            (Vec::new(), skip_binary_diff(rest))
+        } else {
+            ChunkParser.parse_lines_many(rest)?
+        };
 
         let result = DiffFile { header, chunks };
 
         Ok(Some((result, rest)))
     }
+}
+
+fn skip_binary_diff<'a>(mut lines: &'a [&'a str]) -> &'a [&'a str] {
+    while let Some((line, rest)) = lines.split_first() {
+        if matches!(DiffHeaderParser.parse_line(line), Ok(Some(_))) {
+            return lines;
+        }
+        lines = rest;
+    }
+    lines
 }
 
 #[test]

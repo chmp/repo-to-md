@@ -52,7 +52,52 @@ impl<'a> MultilineParser<'a> for DiffFileHeaderParser {
         let (extended_header, rest) = ExtendedHeaderLineParser.parse_lines_many(rest)?;
         let (old_files, rest) = OldFileHeaderLineParser.parse_lines_many(rest)?;
         if old_files.is_empty() {
-            bail!("missing old file header line");
+            let Some(marker) = rest.first() else {
+                bail!("missing old file header line");
+            };
+            if !is_binary_diff_marker(marker) {
+                bail!("missing old file header line");
+            }
+
+            let old_file = if extended_header
+                .iter()
+                .any(|line| matches!(line, ExtendedHeaderLine::NewFileMode(_)))
+            {
+                None
+            } else {
+                extended_header
+                    .iter()
+                    .find_map(|line| match line {
+                        ExtendedHeaderLine::RenameFrom(path)
+                        | ExtendedHeaderLine::CopyFrom(path) => Some(path.clone()),
+                        _ => None,
+                    })
+                    .or_else(|| Some(header.left.clone()))
+            };
+            let new_file = if extended_header
+                .iter()
+                .any(|line| matches!(line, ExtendedHeaderLine::DeletedFileMode(_)))
+            {
+                None
+            } else {
+                extended_header
+                    .iter()
+                    .find_map(|line| match line {
+                        ExtendedHeaderLine::RenameTo(path) | ExtendedHeaderLine::CopyTo(path) => {
+                            Some(path.clone())
+                        }
+                        _ => None,
+                    })
+                    .or_else(|| Some(header.right.clone()))
+            };
+
+            let result = DiffFileHeader {
+                header,
+                extended_header,
+                old_files: vec![old_file],
+                new_file,
+            };
+            return Ok(Some((result, rest)));
         }
         let Some((new_file, rest)) = NewFileHeaderLineParser.parse_lines(rest)? else {
             bail!("missing new file header line");
@@ -67,6 +112,10 @@ impl<'a> MultilineParser<'a> for DiffFileHeaderParser {
 
         Ok(Some((result, rest)))
     }
+}
+
+pub(super) fn is_binary_diff_marker(line: &str) -> bool {
+    line == "GIT binary patch" || (line.starts_with("Binary files ") && line.ends_with(" differ"))
 }
 
 #[test]

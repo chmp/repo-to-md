@@ -98,3 +98,60 @@ fn parse_full_diff_rejects_trailing_content() {
         "{error}"
     );
 }
+
+#[test]
+fn parse_binary_file_without_file_headers_and_continue_to_next_file() {
+    let lines = [
+        "diff --git a/images/rwasm.jpg b/images/rwasm.jpg",
+        "new file mode 100644",
+        "index 0000000..9fb9beb",
+        "Binary files /dev/null and b/images/rwasm.jpg differ",
+        "diff --git a/src/main.rs b/src/main.rs",
+        "index 1111111..2222222 100644",
+        "--- a/src/main.rs",
+        "+++ b/src/main.rs",
+        "@@ -1,1 +1,1 @@",
+        "-old",
+        "+new",
+    ];
+
+    let diff = parse(&lines).unwrap();
+    assert_eq!(diff.files.len(), 2);
+
+    let binary = &diff.files[0];
+    assert_eq!(binary.header.header.left.as_str(), "images/rwasm.jpg");
+    assert_eq!(binary.header.old_files, vec![None]);
+    assert_eq!(
+        binary.header.new_file.as_ref().map(|path| path.as_str()),
+        Some("images/rwasm.jpg")
+    );
+    assert_eq!(binary.header.extended_header.len(), 2);
+    assert!(binary.chunks.is_empty());
+    assert_eq!(diff.files[1].header.header.left.as_str(), "src/main.rs");
+    assert_eq!(diff.files[1].chunks.len(), 1);
+}
+
+#[test]
+fn parse_git_binary_patch_and_continue_to_next_file() {
+    let lines = [
+        "diff --git a/images/logo.png b/images/logo.png",
+        "index 1111111..2222222 100644",
+        "GIT binary patch",
+        "literal 10",
+        "opaque binary payload",
+        "",
+        "diff --git a/README.md b/README.md",
+        "index 3333333..4444444 100644",
+        "--- a/README.md",
+        "+++ b/README.md",
+        "@@ -1,1 +1,1 @@",
+        "-old",
+        "+new",
+    ];
+
+    let diff = parse(&lines).unwrap();
+    assert_eq!(diff.files.len(), 2);
+    assert!(diff.files[0].chunks.is_empty());
+    assert_eq!(diff.files[1].header.header.left.as_str(), "README.md");
+    assert_eq!(diff.files[1].chunks.len(), 1);
+}
