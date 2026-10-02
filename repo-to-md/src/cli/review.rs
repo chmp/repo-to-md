@@ -169,4 +169,67 @@ mod tests {
 
         assert_eq!(local.output, Some(PathBuf::from("custom-session.json")));
     }
+
+    #[test]
+    fn parse_review_local_diff_file_mode() {
+        let cmd = ReviewCommand::from_args(
+            &["repo-to-md", "review"],
+            &["local", "--diff", "saved.patch", "--no-open"],
+        )
+        .unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert!(local.refs.is_empty());
+        assert_eq!(local.diff, Some(PathBuf::from("saved.patch")));
+        assert!(local.no_open);
+    }
+
+    #[test]
+    fn parse_review_local_single_commit_mode() {
+        let cmd = ReviewCommand::from_args(
+            &["repo-to-md", "review"],
+            &["local", "--commit", "HEAD~2", "--port", "9000"],
+        )
+        .unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert!(local.refs.is_empty());
+        assert_eq!(local.commit.as_deref(), Some("HEAD~2"));
+        assert_eq!(local.port, Some(9000));
+    }
+
+    #[test]
+    fn parse_review_local_diff_and_commit_options_together() {
+        let cmd = ReviewCommand::from_args(
+            &["repo-to-md", "review"],
+            &["local", "--diff", "saved.patch", "--commit", "HEAD"],
+        )
+        .unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert!(local.refs.is_empty());
+        assert_eq!(local.diff, Some(PathBuf::from("saved.patch")));
+        assert_eq!(local.commit.as_deref(), Some("HEAD"));
+    }
+
+    #[test]
+    fn parse_review_local_diff_option_with_positional_refs() {
+        let cmd = ReviewCommand::from_args(
+            &["repo-to-md", "review"],
+            &["local", "main", "--diff", "saved.patch"],
+        )
+        .unwrap();
+        let ReviewSubcommand::Local(local) = cmd.command else {
+            panic!("expected review local command");
+        };
+
+        assert_eq!(local.refs, vec![String::from("main")]);
+        assert_eq!(local.diff, Some(PathBuf::from("saved.patch")));
+    }
 }

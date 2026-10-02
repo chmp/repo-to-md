@@ -144,13 +144,15 @@ cargo run -- review local main               # Review commits from main to HEAD
 cargo run -- review local main feature       # Review commits from main to feature
 cargo run -- review local HEAD~5 HEAD~2      # Review specific commit range
 cargo run -- review local main --no-open     # Don't open browser automatically
+cargo run -- review local --diff change.patch # Review a saved unified diff
+cargo run -- review local --commit HEAD~2    # Review one commit against its first parent
 ```
 
 The `review local` command launches a local web server with a side-by-side diff
-viewer for reviewing a range of commits before merge. It takes a base ref (first
-argument) and an optional end ref (second argument, defaults to HEAD). When no
-arguments are provided, it auto-detects the base branch (trying origin/HEAD,
-main, then master).
+viewer. In positional-ref mode, it reviews a range of commits before merge. It
+takes a base ref (first argument) and an optional end ref (second argument,
+defaults to HEAD). When no positional refs or mode options are provided, it
+auto-detects the base branch (trying origin/HEAD, main, then master).
 
 When the end ref defaults to `HEAD`, uncommitted changes produce a warning and
 the review continues; the review includes committed changes only. The command
@@ -159,11 +161,24 @@ or refs, protecting its comments. Choose a different output path or remove the
 existing session file to start fresh. It also refuses to start if no commits
 exist in the range.
 
-Sessions are saved under `.review-comments/`, keyed by the resolved base and
-end commit SHAs. Reopening the same range resumes its session, while a changed
-range gets a separate session file. The directory's `.gitignore` excludes the
-generated JSON files. Use `-o` to override the session path. Browser opens
-automatically by default (use `--no-open` to disable).
+`--diff <path>` reviews an existing unified diff file and displays its source
+path in the UI. The default session is `.review-comments/diff-<blob-id>.json`,
+keyed by the exact diff contents, so identical content resumes the same session
+even when read from a different path. `-o` can select a custom session path;
+the command protects an existing session if the diff contents change.
+
+`--commit <ref>` resolves one commit and reviews it against its first parent.
+Root commits use the empty tree as the base; merge commits use their first
+parent. The default session is keyed by the resolved base and commit SHAs.
+`--diff` and `--commit` are mutually exclusive and cannot be combined with
+positional refs. The server options (`--bind`, `--port`, and `--no-open`) remain
+available in either mode.
+
+Range sessions are saved under `.review-comments/`, keyed by the resolved base
+and end commit SHAs. Reopening the same range resumes its session, while a
+changed range gets a separate session file. The directory's `.gitignore`
+excludes the generated JSON files. Use `-o` to override the session path.
+Browser opens automatically by default (use `--no-open` to disable).
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
