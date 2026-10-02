@@ -175,10 +175,6 @@ html {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
-.app-status.success {
-    border-color: var(--accent-green);
-}
-
 .app-status.error {
     border-color: var(--accent-red);
 }

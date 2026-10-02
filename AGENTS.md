@@ -85,10 +85,10 @@ Nix-packaged Playwright browser bundle required on NixOS.
 
 ### Commits
 
-After completing a major code or documentation change, create a Git commit by
-default unless the user asks you not to. Before committing, run the required
-format, lint, and test checks, review the diff, and stage only files related to
-the change. Use a concise, imperative commit subject.
+Create a Git commit for completed changes unless the user explicitly asks you
+not to. Before committing, run the required format, lint, and test checks,
+review the diff, and stage only files related to the change. Use a concise,
+imperative commit subject.
 
 ### Build
 
@@ -337,6 +337,10 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
 - **file-tree.js** - File list with status icons and comment counts
 - **comment-form.js** - New comment input form
 - **review-comment.js** - Comment display with edit/delete actions
+
+**UI feedback:** Show transient toasts for errors only. Successful actions,
+including marking a file viewed and comment changes, should be reflected in the
+updated UI without a success toast.
 
 ### Key components
 

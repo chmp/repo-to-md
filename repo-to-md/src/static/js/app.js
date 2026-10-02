@@ -245,10 +245,9 @@ export class App {
             // Update just that item instead of full refresh
             this.fileTree.updateItem(path, { isViewed: viewed });
             this.updateRemainingUnviewed();
-            this.showStatus(viewed ? 'File marked as viewed.' : 'File marked as unviewed.', 'success');
         } catch (error) {
             console.error('Failed to toggle viewed status:', error);
-            this.showStatus(`Could not update viewed status: ${this.getErrorMessage(error)}`, 'error');
+            this.showError(`Could not update viewed status: ${this.getErrorMessage(error)}`);
         } finally {
             this.pendingMutations.delete(operation);
             if (button?.isConnected) button.disabled = false;
@@ -268,12 +267,11 @@ export class App {
             this.comments.push(result.comment);
             this.diffView.hideCommentForm();
             this.updateViews();
-            this.showStatus('Comment added.', 'success');
         } catch (error) {
             console.error('Failed to create comment:', error);
             const message = `Could not add comment: ${this.getErrorMessage(error)}`;
             form?.setSaveError(message);
-            this.showStatus(message, 'error');
+            this.showError(message);
         }
     }
 
@@ -285,12 +283,11 @@ export class App {
                 this.comments[index] = result.comment;
             }
             this.updateViews();
-            this.showStatus('Comment saved.', 'success');
         } catch (error) {
             console.error('Failed to update comment:', error);
             const message = `Could not save comment: ${this.getErrorMessage(error)}`;
             commentElement?.setSaveError(message);
-            this.showStatus(message, 'error');
+            this.showError(message);
         }
     }
 
@@ -308,10 +305,9 @@ export class App {
             await api.deleteComment(id);
             this.comments = this.comments.filter(c => c.id !== id);
             this.updateViews();
-            this.showStatus('Comment deleted.', 'success');
         } catch (error) {
             console.error('Failed to delete comment:', error);
-            this.showStatus(`Could not delete comment: ${this.getErrorMessage(error)}`, 'error');
+            this.showError(`Could not delete comment: ${this.getErrorMessage(error)}`);
         } finally {
             this.pendingMutations.delete(operation);
             if (button?.isConnected) button.disabled = false;
@@ -331,10 +327,9 @@ export class App {
                 this.comments[index] = result.comment;
             }
             this.updateViews();
-            this.showStatus(result.comment.is_minimized ? 'Comment resolved.' : 'Comment reopened.', 'success');
         } catch (error) {
             console.error('Failed to toggle minimize comment:', error);
-            this.showStatus(`Could not update comment status: ${this.getErrorMessage(error)}`, 'error');
+            this.showError(`Could not update comment status: ${this.getErrorMessage(error)}`);
         } finally {
             this.pendingMutations.delete(operation);
             if (button?.isConnected) button.disabled = false;
@@ -412,17 +407,17 @@ export class App {
         this.commentNavStatus.textContent = `Comment ${currentIndex + 1} of ${count}`;
     }
 
-    showStatus(message, type = 'info') {
+    showError(message) {
         if (!this.appStatus) return;
         clearTimeout(this.statusTimer);
         this.appStatus.hidden = false;
-        this.appStatus.className = `app-status ${type}`;
-        this.appStatus.setAttribute('role', type === 'error' ? 'alert' : 'status');
-        this.appStatus.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+        this.appStatus.className = 'app-status error';
+        this.appStatus.setAttribute('role', 'alert');
+        this.appStatus.setAttribute('aria-live', 'assertive');
         this.appStatus.textContent = message;
         this.statusTimer = setTimeout(() => {
             this.appStatus.hidden = true;
-        }, type === 'error' ? 8000 : 4000);
+        }, 8000);
     }
 
     getErrorMessage(error) {
