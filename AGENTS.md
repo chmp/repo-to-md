@@ -182,8 +182,8 @@ parent. The default session is keyed by the resolved base and commit SHAs.
 positional refs. The server options (`--bind`, `--port`, and `--no-open`) remain
 available in either mode.
 
-`--from <path>` starts a new session with comments copied from an earlier local
-review JSON file. The new session uses the current diff and resets viewed-file
+`--from <path>` continues from an earlier local review JSON file. The new
+session uses the current diff and carries forward comments and viewed-file
 progress. The output session must not already exist; choose a different `-o`
 path or resume the existing session without `--from`.
 

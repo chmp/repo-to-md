@@ -7,7 +7,7 @@ use anyhow::{Context, Result, bail};
 use argh::FromArgs;
 
 use crate::executable::check_executable;
-use crate::local::{self, CommentsFile, RefSpec, detect_base_branch};
+use crate::local::{self, CommentsFile, RefSpec, SessionSeed, detect_base_branch};
 use crate::repository::{CheckWorkingDirectory, LocalRepository};
 use crate::side_by_side_diff::SideBySideDiff;
 
@@ -36,7 +36,7 @@ pub struct ReviewLocalCommand {
     #[argh(option, short = 'o')]
     pub output: Option<PathBuf>,
 
-    /// seed a new review with comments from a previous session JSON file
+    /// continue from a previous local review session JSON file
     #[argh(option)]
     pub from: Option<PathBuf>,
 
@@ -115,11 +115,11 @@ impl ReviewLocalCommand {
             None => SideBySideDiff::parse(&raw_diff)?,
         };
 
-        let initial_comments = match self.from.as_ref() {
+        let session_seed = match self.from.as_ref() {
             Some(source_path) => {
                 if comments_path.exists() {
                     bail!(
-                        "Cannot seed from '{source}' because the output session '{output}' already exists. Choose a new output path with -o.",
+                        "Cannot continue from '{source}' because the output session '{output}' already exists. Choose a new output path with -o.",
                         source = source_path.display(),
                         output = comments_path.display()
                     );
@@ -132,11 +132,15 @@ impl ReviewLocalCommand {
                     )
                 })?;
                 eprintln!(
-                    "Seeding new review with {count} comments from '{path}'",
+                    "Continuing review with {count} comments and {viewed_count} viewed files from '{path}'",
                     count = source.comments.len(),
+                    viewed_count = source.viewed_files.len(),
                     path = source_path.display()
                 );
-                Some(source.comments)
+                Some(SessionSeed {
+                    comments: source.comments,
+                    viewed_files: source.viewed_files,
+                })
             }
             None => None,
         };
@@ -151,13 +155,13 @@ impl ReviewLocalCommand {
         tokio::runtime::Runtime::new()
             .context("Failed to create tokio runtime")?
             .block_on(async {
-                let server = local::bind_server_with_initial_comments(
+                let server = local::bind_server_with_session_seed(
                     refspec,
                     port,
                     comments_path,
                     diff,
                     raw_diff,
-                    initial_comments,
+                    session_seed,
                     &bind,
                 )
                 .await?;

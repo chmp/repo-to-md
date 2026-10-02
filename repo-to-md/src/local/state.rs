@@ -42,6 +42,13 @@ impl CommentsFile {
     }
 }
 
+/// Comments and viewed-file progress copied from an earlier review session.
+#[derive(Debug, Clone)]
+pub struct SessionSeed {
+    pub comments: Vec<Comment>,
+    pub viewed_files: Vec<String>,
+}
+
 /// Application state shared across all handlers
 pub struct AppState {
     pub refspec: RefSpec,
@@ -62,26 +69,29 @@ impl AppState {
         diff: SideBySideDiff<'static>,
         raw_diff: String,
     ) -> Result<Arc<Self>> {
-        Self::new_with_initial_comments(refspec, comments_file_path, diff, raw_diff, None)
+        Self::new_with_session_seed(refspec, comments_file_path, diff, raw_diff, None)
     }
 
-    pub fn new_with_initial_comments(
+    pub fn new_with_session_seed(
         refspec: RefSpec,
         comments_file_path: PathBuf,
         diff: SideBySideDiff<'static>,
         raw_diff: String,
-        initial_comments: Option<Vec<Comment>>,
+        session_seed: Option<SessionSeed>,
     ) -> Result<Arc<Self>> {
         let is_new_session = !comments_file_path.exists();
-        if initial_comments.is_some() && !is_new_session {
+        if session_seed.is_some() && !is_new_session {
             anyhow::bail!(
-                "Cannot seed comments because session '{path}' already exists",
+                "Cannot continue from a previous review because session '{path}' already exists",
                 path = comments_file_path.display()
             );
         }
 
         let (comments, viewed_files, mtime) = if is_new_session {
-            (initial_comments.unwrap_or_default(), Vec::new(), None)
+            match session_seed {
+                Some(seed) => (seed.comments, seed.viewed_files, None),
+                None => (Vec::new(), Vec::new(), None),
+            }
         } else {
             Self::load_comments(&comments_file_path)?
         };
@@ -320,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn new_state_can_start_with_comments_from_another_review() {
+    fn new_state_can_continue_from_another_review_session() {
         let directory = tempdir().unwrap();
         let comments_file_path = directory.path().join("new-session.json");
         let refspec = RefSpec {
@@ -341,12 +351,15 @@ mod tests {
             is_minimized: false,
         }];
 
-        AppState::new_with_initial_comments(
+        AppState::new_with_session_seed(
             refspec,
             comments_file_path.clone(),
             SideBySideDiff::parse("").unwrap(),
             "new diff snapshot".to_string(),
-            Some(initial_comments),
+            Some(SessionSeed {
+                comments: initial_comments,
+                viewed_files: vec!["src/lib.rs".to_string()],
+            }),
         )
         .unwrap();
 
@@ -354,7 +367,7 @@ mod tests {
         assert_eq!(saved.comments.len(), 1);
         assert_eq!(saved.comments[0].id, "previous-comment");
         assert_eq!(saved.comments[0].body, "Carry this comment forward");
-        assert!(saved.viewed_files.is_empty());
+        assert_eq!(saved.viewed_files, vec!["src/lib.rs"]);
         assert_eq!(saved.start_sha, "new-base-sha");
         assert_eq!(saved.end_sha, "new-end-sha");
         assert_eq!(saved.raw_diff, "new diff snapshot");

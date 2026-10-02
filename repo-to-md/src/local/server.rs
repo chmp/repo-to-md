@@ -16,8 +16,7 @@ use super::handlers::{
     update_comment,
 };
 use super::refspec::RefSpec;
-use super::state::AppState;
-use crate::client::Comment;
+use super::state::{AppState, SessionSeed};
 use crate::side_by_side_diff::SideBySideDiff;
 
 /// Shared state for shutdown signaling
@@ -94,7 +93,7 @@ pub async fn bind_server(
     raw_diff: String,
     bind_address: &str,
 ) -> Result<BoundServer> {
-    bind_server_with_initial_comments(
+    bind_server_with_session_seed(
         refspec,
         port,
         comments_file,
@@ -106,22 +105,22 @@ pub async fn bind_server(
     .await
 }
 
-/// Bind the server and optionally seed a new session with comments from another review.
-pub async fn bind_server_with_initial_comments(
+/// Bind the server and optionally seed a new session from another review.
+pub async fn bind_server_with_session_seed(
     refspec: RefSpec,
     port: u16,
     comments_file: PathBuf,
     diff: SideBySideDiff<'static>,
     raw_diff: String,
-    initial_comments: Option<Vec<Comment>>,
+    session_seed: Option<SessionSeed>,
     bind_address: &str,
 ) -> Result<BoundServer> {
-    let app_state = AppState::new_with_initial_comments(
+    let app_state = AppState::new_with_session_seed(
         refspec,
         comments_file.clone(),
         diff,
         raw_diff,
-        initial_comments,
+        session_seed,
     )?;
 
     // Create shutdown signal channel
