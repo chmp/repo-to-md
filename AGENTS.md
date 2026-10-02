@@ -144,7 +144,6 @@ cargo run -- review local main               # Review commits from main to HEAD
 cargo run -- review local main feature       # Review commits from main to feature
 cargo run -- review local HEAD~5 HEAD~2      # Review specific commit range
 cargo run -- review local main --no-open     # Don't open browser automatically
-cargo run -- review local --force            # Allow dirty HEAD review or replace mismatched -o session
 ```
 
 The `review local` command launches a local web server with a side-by-side diff
@@ -153,10 +152,12 @@ argument) and an optional end ref (second argument, defaults to HEAD). When no
 arguments are provided, it auto-detects the base branch (trying origin/HEAD,
 main, then master).
 
-The command refuses to start if:
-- There are uncommitted changes and reviewing HEAD (use `--force` to override)
-- An explicit `-o` session file exists but has changed commits/refs (use `--force` to replace it and discard its comments)
-- No commits exist in the range
+When the end ref defaults to `HEAD`, uncommitted changes produce a warning and
+the review continues; the review includes committed changes only. The command
+refuses to start if an explicit `-o` session file exists for different commits
+or refs, protecting its comments. Choose a different output path or remove the
+existing session file to start fresh. It also refuses to start if no commits
+exist in the range.
 
 Sessions are saved under `.review-comments/`, keyed by the resolved base and
 end commit SHAs. Reopening the same range resumes its session, while a changed

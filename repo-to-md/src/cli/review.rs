@@ -138,6 +138,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_review_local_rejects_removed_force_switch() {
+        let result = ReviewCommand::from_args(&["repo-to-md", "review"], &["local", "--force"]);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn parse_review_format_local_switch() {
         let cmd =
             ReviewCommand::from_args(&["repo-to-md", "review"], &["format", "--local"]).unwrap();

@@ -38,10 +38,6 @@ pub struct ReviewLocalCommand {
     /// do not open browser automatically
     #[argh(switch)]
     pub no_open: bool,
-
-    /// allow a dirty working tree when end defaults to HEAD; replace mismatched -o sessions, discarding comments
-    #[argh(switch)]
-    pub force: bool,
 }
 
 impl ReviewLocalCommand {
@@ -59,22 +55,20 @@ impl ReviewLocalCommand {
             ),
         };
 
-        if self.refs.len() < 2 && !self.force {
+        let refspec = RefSpec::parse(&base, &end)?.resolve()?;
+
+        if self.refs.len() < 2 {
             let repo = LocalRepository;
-            if repo.has_uncommitted_changes()? {
-                bail!(
-                    "Working directory has uncommitted changes. \
-                     Commit or stash changes before reviewing, or use --force to proceed anyway."
-                );
+            if let Some(warning) = working_tree_warning(&repo, &refspec)? {
+                eprintln!("{warning}");
             }
         }
 
-        let refspec = RefSpec::parse(&base, &end)?.resolve()?;
         let comments_path = match self.output.as_ref() {
             Some(path) => path.clone(),
             None => default_comments_path_in(Path::new(".review-comments"), &refspec)?,
         };
-        let raw_diff = validate_and_prepare_session(&comments_path, &refspec, self.force)?;
+        let raw_diff = validate_and_prepare_session(&comments_path, &refspec)?;
 
         let diff = SideBySideDiff::parse(&raw_diff)?;
 
@@ -156,6 +150,21 @@ fn open_url(url: &str) {
     }
 }
 
+fn working_tree_warning(
+    repo: &impl CheckWorkingDirectory,
+    refspec: &RefSpec,
+) -> Result<Option<String>> {
+    if !repo.has_uncommitted_changes()? {
+        return Ok(None);
+    }
+
+    Ok(Some(format!(
+        "Warning: Working directory has uncommitted changes. The review covers committed changes in {base}..{end}; working-tree changes are not included.",
+        base = refspec.start_ref,
+        end = refspec.end_ref
+    )))
+}
+
 /// Generate a raw diff from git using the refspec
 fn generate_raw_diff(refspec: &RefSpec) -> Result<String> {
     let diff_args = refspec.diff_args();
@@ -178,12 +187,8 @@ fn generate_raw_diff(refspec: &RefSpec) -> Result<String> {
 ///
 /// If the file exists and refs/commits match, returns the stored diff.
 /// If no file exists, generates a new one.
-/// If refs/commits don't match, requires --force to regenerate.
-fn validate_and_prepare_session(
-    comments_path: &Path,
-    refspec: &RefSpec,
-    force: bool,
-) -> Result<String> {
+/// If refs/commits don't match, returns an error to protect existing comments.
+fn validate_and_prepare_session(comments_path: &Path, refspec: &RefSpec) -> Result<String> {
     if !comments_path.exists() {
         eprintln!("Generating diff snapshot...");
         return generate_raw_diff(refspec);
@@ -205,21 +210,9 @@ fn validate_and_prepare_session(
         return generate_raw_diff(refspec);
     }
 
-    // Refs or commits don't match
-    if force {
-        eprintln!("Session has changed Regenerating session.");
-        fs::remove_file(comments_path).with_context(|| {
-            format!(
-                "Failed to delete comments file '{path}'",
-                path = comments_path.display()
-            )
-        })?;
-        eprintln!("Generating diff snapshot...");
-        return generate_raw_diff(refspec);
-    }
-
     bail!(
-        "Session has changed. Use --force to regenerate the session and discard existing comments.",
+        "Session at '{path}' has changed. Choose a different output path with -o, or remove the file to start a new session and discard its comments.",
+        path = comments_path.display()
     );
 }
 
@@ -230,6 +223,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+    use crate::repository::MockRepository;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -344,6 +338,46 @@ mod tests {
     }
 
     #[test]
+    fn dirty_working_tree_warning_explains_review_scope() {
+        let repo = MockRepository::new("owner", "repo", "main").with_uncommitted_changes(true);
+        let mut refspec = test_refspec("base-sha", "end-sha");
+        refspec.start_ref = "main".to_string();
+        refspec.end_ref = "HEAD".to_string();
+
+        assert_eq!(
+            working_tree_warning(&repo, &refspec).unwrap(),
+            Some("Warning: Working directory has uncommitted changes. The review covers committed changes in main..HEAD; working-tree changes are not included.".to_string())
+        );
+    }
+
+    #[test]
+    fn changed_session_is_preserved_and_returns_actionable_error() {
+        let directory = tempdir().unwrap();
+        let comments_path = directory.path().join("session.json");
+        let stored_file = CommentsFile {
+            version: 1,
+            start_ref: "main".to_string(),
+            start_sha: "old-base-sha".to_string(),
+            end_ref: "HEAD".to_string(),
+            end_sha: "old-end-sha".to_string(),
+            raw_diff: "stored diff".to_string(),
+            comments: Vec::new(),
+            viewed_files: Vec::new(),
+        };
+        serde_json::to_writer(fs::File::create(&comments_path).unwrap(), &stored_file).unwrap();
+        let original_contents = fs::read(&comments_path).unwrap();
+
+        let error = validate_and_prepare_session(
+            &comments_path,
+            &test_refspec("new-base-sha", "new-end-sha"),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("Choose a different output path"));
+        assert_eq!(fs::read(&comments_path).unwrap(), original_contents);
+    }
+
+    #[test]
     fn matching_default_session_reuses_stored_diff() {
         let directory = tempdir().unwrap();
         let refspec = test_refspec("base-sha", "end-sha");
@@ -362,7 +396,7 @@ mod tests {
         serde_json::to_writer(fs::File::create(&comments_path).unwrap(), &stored_file).unwrap();
 
         assert_eq!(
-            validate_and_prepare_session(&comments_path, &refspec, false).unwrap(),
+            validate_and_prepare_session(&comments_path, &refspec).unwrap(),
             "stored diff"
         );
     }
@@ -383,7 +417,6 @@ mod tests {
             bind: None,
             output: None,
             no_open: false,
-            force: false,
         }
     }
 

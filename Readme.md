@@ -128,15 +128,16 @@ repo-to-md review local main feature       # Review commits from main to feature
 ```
 
 This launches a local web server with a side-by-side diff viewer where you can
-add comments to the changes. The command reviews a range of commits (base..end)
-and refuses to start if there are uncommitted changes when HEAD is the end ref.
-Use `--force` to proceed in that case. Sessions are persisted under
-`.review-comments/`, with one JSON file per base and end commit SHA. Reopening
-the same commit range resumes its session; a different range gets a separate
-session. The directory contains a `.gitignore` so generated session files stay
-out of Git. Use `-o` to save to a specific JSON path instead. If that path
-already contains a session for a different range, `--force` replaces it and
-discards its comments.
+add comments to the changes. The command reviews a range of commits (base..end).
+If the end ref defaults to `HEAD` and there are uncommitted changes, it prints a
+warning and continues; working-tree changes are not included in the review.
+Sessions are persisted under `.review-comments/`, with one JSON file per base
+and end commit SHA. Reopening the same commit range resumes its session; a
+different range gets a separate session. The directory contains a `.gitignore`
+so generated session files stay out of Git. Use `-o` to save to a specific JSON
+path instead. If that path already contains a session for a different range,
+the command reports an error to protect its comments. Choose a different output
+path or remove the existing session file to start fresh.
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
