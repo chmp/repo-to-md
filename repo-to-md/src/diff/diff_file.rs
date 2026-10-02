@@ -32,14 +32,24 @@ impl<'a> MultilineParser<'a> for DiffFileParser {
     type Output = DiffFile<'a>;
 
     fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        let Some((header, rest)) = DiffFileHeaderParser.parse_lines(lines)? else {
+        self.parse_lines_at(lines, 1)
+    }
+
+    fn parse_lines_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<Option<(Self::Output, &'a [&'a str])>> {
+        let Some((header, rest)) = DiffFileHeaderParser.parse_lines_at(lines, first_line_number)?
+        else {
             return Ok(None);
         };
+        let chunks_first_line = first_line_number + lines.len() - rest.len();
         let is_binary = rest.first().is_some_and(|line| is_binary_diff_marker(line));
         let (chunks, rest) = if is_binary {
             (Vec::new(), skip_binary_diff(rest))
         } else {
-            ChunkParser.parse_lines_many(rest)?
+            ChunkParser.parse_lines_many_at(rest, chunks_first_line)?
         };
 
         let result = DiffFile { header, chunks };

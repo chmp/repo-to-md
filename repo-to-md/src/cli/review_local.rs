@@ -76,9 +76,7 @@ impl ReviewLocalCommand {
             }
             ReviewInput::DiffFile(path) => {
                 let raw_diff = read_diff_file(&path)?;
-                let diff = SideBySideDiff::parse(&raw_diff).with_context(|| {
-                    format!("Failed to parse diff file '{path}'", path = path.display())
-                })?;
+                let diff = parse_diff_file(&path, &raw_diff)?;
                 let blob_id = git_blob_id(raw_diff.as_bytes())?;
                 let source_path = path.display().to_string();
                 let refspec = RefSpec {
@@ -279,6 +277,15 @@ fn generate_raw_diff_in(directory: &Path, refspec: &RefSpec) -> Result<String> {
 fn read_diff_file(path: &Path) -> Result<String> {
     fs::read_to_string(path)
         .with_context(|| format!("Failed to read diff file '{path}'", path = path.display()))
+}
+
+fn parse_diff_file(path: &Path, raw_diff: &str) -> Result<SideBySideDiff<'static>> {
+    SideBySideDiff::parse(raw_diff).map_err(|error| {
+        anyhow::anyhow!(
+            "Failed to parse diff file '{path}': {error}",
+            path = path.display()
+        )
+    })
 }
 
 fn git_blob_id(content: &[u8]) -> Result<String> {
@@ -753,11 +760,12 @@ mod tests {
         let invalid_path = directory.path().join("invalid.diff");
         fs::write(&invalid_path, "this is not a unified diff\n").unwrap();
         let raw_diff = read_diff_file(&invalid_path).unwrap();
-        let invalid_error = match SideBySideDiff::parse(&raw_diff) {
+        let invalid_error = match parse_diff_file(&invalid_path, &raw_diff) {
             Ok(_) => panic!("invalid diff should not parse"),
             Err(error) => error,
         };
-        assert!(!invalid_error.to_string().is_empty());
+        assert!(invalid_error.to_string().contains("invalid.diff"));
+        assert!(invalid_error.to_string().contains("line 1:"));
     }
 
     #[test]

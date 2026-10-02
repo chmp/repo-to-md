@@ -83,6 +83,13 @@ The frontend test runner serves `repo-to-md/src/static/test.html` locally and
 executes it in headless Chromium via Python Playwright. The flake provides the
 Nix-packaged Playwright browser bundle required on NixOS.
 
+### Commits
+
+After completing a major code or documentation change, create a Git commit by
+default unless the user asks you not to. Before committing, run the required
+format, lint, and test checks, review the diff, and stage only files related to
+the change. Use a concise, imperative commit subject.
+
 ### Build
 
 ```bash

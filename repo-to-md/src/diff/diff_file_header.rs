@@ -1,5 +1,4 @@
-use anyhow::Result;
-use anyhow::bail;
+use anyhow::{Result, anyhow, bail};
 
 use super::diff_header::{DiffHeader, DiffHeaderParser};
 use super::extended_header_line::{ExtendedHeaderLine, ExtendedHeaderLineParser};
@@ -46,17 +45,33 @@ impl<'a> MultilineParser<'a> for DiffFileHeaderParser {
     type Output = DiffFileHeader<'a>;
 
     fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        let Some((header, rest)) = DiffHeaderParser.parse_lines(lines)? else {
+        self.parse_lines_at(lines, 1)
+    }
+
+    fn parse_lines_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<Option<(Self::Output, &'a [&'a str])>> {
+        let Some((header, rest)) = DiffHeaderParser.parse_lines_at(lines, first_line_number)?
+        else {
             return Ok(None);
         };
-        let (extended_header, rest) = ExtendedHeaderLineParser.parse_lines_many(rest)?;
-        let (old_files, rest) = OldFileHeaderLineParser.parse_lines_many(rest)?;
+        let mut line_number = first_line_number + lines.len() - rest.len();
+        let (extended_header, next_rest) =
+            ExtendedHeaderLineParser.parse_lines_many_at(rest, line_number)?;
+        line_number += rest.len() - next_rest.len();
+        let rest = next_rest;
+        let (old_files, next_rest) =
+            OldFileHeaderLineParser.parse_lines_many_at(rest, line_number)?;
+        line_number += rest.len() - next_rest.len();
+        let rest = next_rest;
         if old_files.is_empty() {
             let Some(marker) = rest.first() else {
-                bail!("missing old file header line");
+                return Err(anyhow!("line {line_number}: missing old file header line"));
             };
             if !is_binary_diff_marker(marker) {
-                bail!("missing old file header line");
+                bail!("line {line_number}: missing old file header line");
             }
 
             let old_file = if extended_header
@@ -99,8 +114,9 @@ impl<'a> MultilineParser<'a> for DiffFileHeaderParser {
             };
             return Ok(Some((result, rest)));
         }
-        let Some((new_file, rest)) = NewFileHeaderLineParser.parse_lines(rest)? else {
-            bail!("missing new file header line");
+        let Some((new_file, rest)) = NewFileHeaderLineParser.parse_lines_at(rest, line_number)?
+        else {
+            bail!("line {line_number}: missing new file header line");
         };
 
         let result = DiffFileHeader {

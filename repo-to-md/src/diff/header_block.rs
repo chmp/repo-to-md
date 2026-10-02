@@ -3,7 +3,7 @@ use anyhow::{Result, bail, ensure};
 use super::diff_header::{DiffHeader, DiffHeaderParser};
 use super::extended_header_line::{ExtendedHeaderLine, ExtendedHeaderLineParser};
 use super::file_header_line::{NewFileHeaderLineParser, OldFileHeaderLineParser};
-use super::parser::{LineParser, MultilineParser};
+use super::parser::MultilineParser;
 use super::path::Path;
 
 /// A parsed header block without its following chunks.
@@ -46,37 +46,52 @@ impl<'a> MultilineParser<'a> for DiffHeaderBlockParser {
     type Output = DiffHeaderBlock<'a>;
 
     fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        let Some((line, rest)) = lines.split_first() else {
+        self.parse_lines_at(lines, 1)
+    }
+
+    fn parse_lines_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<Option<(Self::Output, &'a [&'a str])>> {
+        let Some((diff, mut rest)) = DiffHeaderParser.parse_lines_at(lines, first_line_number)?
+        else {
             return Ok(None);
         };
-        let Some(diff) = DiffHeaderParser.parse_line(line)? else {
-            return Ok(None);
-        };
-        let mut lines = rest;
+        let mut line_number = first_line_number + lines.len() - rest.len();
 
         let mut extended = Vec::new();
-        while let Some((line, rest)) = lines.split_first() {
-            let Some(header) = ExtendedHeaderLineParser.parse_line(line)? else {
+        loop {
+            let Some((header, next_rest)) =
+                ExtendedHeaderLineParser.parse_lines_at(rest, line_number)?
+            else {
                 break;
             };
             extended.push(header);
-            lines = rest;
+            line_number += rest.len() - next_rest.len();
+            rest = next_rest;
         }
 
         let mut old_files = Vec::new();
-        while let Some((line, rest)) = lines.split_first() {
-            let Some(old_file) = OldFileHeaderLineParser.parse_line(line)? else {
+        loop {
+            let Some((old_file, next_rest)) =
+                OldFileHeaderLineParser.parse_lines_at(rest, line_number)?
+            else {
                 break;
             };
             old_files.push(old_file);
-            lines = rest;
+            line_number += rest.len() - next_rest.len();
+            rest = next_rest;
         }
-        ensure!(!old_files.is_empty(), "missing old file header line");
+        ensure!(
+            !old_files.is_empty(),
+            "line {line_number}: missing old file header line"
+        );
 
-        let Some((line, rest)) = lines.split_first() else {
-            bail!("missing new file header line");
+        let Some((new_file, rest)) = NewFileHeaderLineParser.parse_lines_at(rest, line_number)?
+        else {
+            bail!("line {line_number}: missing new file header line");
         };
-        let new_file = NewFileHeaderLineParser.parse_line_required(line)?;
 
         Ok(Some((
             DiffHeaderBlock {

@@ -9,7 +9,8 @@ use super::LineParser;
 /// The range metadata from an `@@` chunk header.
 ///
 /// Example: `@@ -5,2 +8,3 @@` stores `5..7` in `from_ranges` and `8..11` in
-/// `to_range`.
+/// `to_range`. Git omits the count for one-line ranges, such as `@@ -5 +8 @@`;
+/// an omitted count is treated as one.
 #[derive(Debug, PartialEq, Clone, serde::Serialize)]
 pub struct ChunkHeader {
     pub from_ranges: AtLeastOne<Range<usize>>,
@@ -48,11 +49,13 @@ impl<'a> LineParser<'a> for ChunkHeaderParser {
             let Some((start, range)) = parse_number(range) else {
                 bail!("expected start range, got: {line:?}");
             };
-            let Some(range) = range.strip_prefix(',') else {
-                bail!("expected range separator ',', got: {line:?}");
-            };
-            let Some((len, range)) = parse_number(range) else {
-                bail!("expected range length, got: {line:?}");
+            let (len, range) = if let Some(range) = range.strip_prefix(',') {
+                let Some((len, range)) = parse_number(range) else {
+                    bail!("expected range length, got: {line:?}");
+                };
+                (len, range)
+            } else {
+                ("1", range)
             };
 
             let Ok(start) = start.parse::<usize>() else {
@@ -97,6 +100,13 @@ fn parse_number(s: &str) -> Option<(&str, &str)> {
 
 #[test]
 fn test_parse_chunk_header() {
+    assert_eq!(
+        ChunkHeaderParser.parse_line_expected("@@ -0,0 +1 @@"),
+        ChunkHeader {
+            from_ranges: AtLeastOne::from(0..0),
+            to_range: 1..2,
+        },
+    );
     assert_eq!(
         ChunkHeaderParser.parse_line_expected("@@ -0,0 +1,29 @@  "),
         ChunkHeader {
