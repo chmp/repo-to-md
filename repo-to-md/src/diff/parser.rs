@@ -93,30 +93,25 @@ pub trait MultilineParser<'a>: Sized {
 
     type Output;
 
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>>;
-
     /// Parse lines while retaining their 1-based source line number.
-    ///
-    /// Custom multiline parsers should override this when they delegate to
-    /// other parsers, passing the updated line number along with each suffix.
     fn parse_lines_at(
         &self,
         lines: &'a [&'a str],
         first_line_number: usize,
-    ) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        self.parse_lines(lines)
-            .map_err(|error| anyhow!("line {first_line_number}: {error}"))
-    }
+    ) -> Result<Option<(Self::Output, &'a [&'a str])>>;
 
-    fn parse_lines_required(&self, lines: &'a [&'a str]) -> Result<(Self::Output, &'a [&'a str])> {
-        let Some((this, rest)) = self.parse_lines(lines)? else {
-            bail!("could not parse required {}", Self::NAME);
+    fn parse_lines_required_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<(Self::Output, &'a [&'a str])> {
+        let Some((this, rest)) = self.parse_lines_at(lines, first_line_number)? else {
+            bail!(
+                "line {first_line_number}: could not parse required {}",
+                Self::NAME
+            );
         };
         Ok((this, rest))
-    }
-
-    fn parse_lines_many(&self, lines: &'a [&'a str]) -> Result<(Vec<Self::Output>, &'a [&'a str])> {
-        self.parse_lines_many_at(lines, 1)
     }
 
     /// Parse as many items as possible, tracking the source line for errors.
@@ -140,21 +135,12 @@ pub trait MultilineParser<'a>: Sized {
 
         Ok((result, rest))
     }
-
-    #[cfg(test)]
-    fn parse_lines_expected(&self, lines: &'a [&'a str]) -> Self::Output {
-        self.parse_lines(lines).unwrap().unwrap().0
-    }
 }
 
 impl<'a, P: LineParser<'a>> MultilineParser<'a> for P {
     const NAME: &'static str = P::NAME;
 
     type Output = P::Output;
-
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        self.parse_lines_at(lines, 1)
-    }
 
     fn parse_lines_at(
         &self,

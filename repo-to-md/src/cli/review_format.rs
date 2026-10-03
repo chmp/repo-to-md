@@ -59,11 +59,11 @@ impl ReviewFormatCommand {
         repository: &(impl GetRepoistoryInfo + GetCurrentBranch),
         writer: &mut impl Write,
     ) -> Result<()> {
+        self.validate_arguments()?;
+
         let local_comments_path = if self.local {
-            self.ensure_valid_local_selector()?;
             Some(latest_local_session(Path::new(".review-comments"))?)
         } else if self.should_format_local_review() {
-            self.ensure_no_remote_options_for_local_format()?;
             self.pr_or_file.clone()
         } else {
             None
@@ -88,6 +88,8 @@ impl ReviewFormatCommand {
     }
 
     pub fn check_requirements(&self) -> Result<()> {
+        self.validate_arguments()?;
+
         if self.local || self.should_format_local_review() {
             return Ok(());
         }
@@ -106,6 +108,16 @@ impl ReviewFormatCommand {
 
     fn should_format_local_review(&self) -> bool {
         !self.local && !self.remote && self.pr_or_file.as_ref().is_some_and(|path| path.exists())
+    }
+
+    fn validate_arguments(&self) -> Result<()> {
+        if self.local {
+            self.ensure_valid_local_selector()
+        } else if self.should_format_local_review() {
+            self.ensure_no_remote_options_for_local_format()
+        } else {
+            Ok(())
+        }
     }
 
     fn fetch_local_comments(&self, comments_file: &Path) -> Result<Vec<Comment>> {
@@ -491,6 +503,19 @@ mod tests {
 
         assert!(error.to_string().contains("No local review sessions found"));
         assert!(error.to_string().contains("repo-to-md review local"));
+    }
+
+    #[test]
+    fn local_selector_arguments_are_validated_before_requirements() {
+        let command = ReviewFormatCommand {
+            local: true,
+            repo: Some("owner/repo".to_string()),
+            ..ReviewFormatCommand::default()
+        };
+
+        let error = command.check_requirements().unwrap_err();
+
+        assert!(error.to_string().contains("Cannot combine --local"));
     }
 
     #[test]

@@ -31,10 +31,6 @@ impl<'a> MultilineParser<'a> for DiffFileParser {
 
     type Output = DiffFile<'a>;
 
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        self.parse_lines_at(lines, 1)
-    }
-
     fn parse_lines_at(
         &self,
         lines: &'a [&'a str],
@@ -79,7 +75,7 @@ fn diff_file_into_static() {
         " line",
         "next file",
     ];
-    let (file, rest) = DiffFileParser.parse_lines_required(&lines).unwrap();
+    let (file, rest) = DiffFileParser.parse_lines_required_at(&lines, 1).unwrap();
     assert_eq!(rest, &["next file"]);
 
     let _static_file: DiffFile<'static> = file.into_static();

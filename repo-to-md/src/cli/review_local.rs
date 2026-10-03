@@ -55,11 +55,116 @@ pub struct ReviewLocalCommand {
 
 impl ReviewLocalCommand {
     pub fn run(self) -> Result<()> {
+        self.validate_arguments()?;
         let bind = self.bind_address()?;
         let port = self.port()?;
         let input = self.review_input()?;
+        let PreparedReview {
+            refspec,
+            comments_path,
+            raw_diff,
+            title,
+            parsed_diff,
+            session_seed,
+        } = self.prepare_review(input)?;
 
-        let (refspec, comments_path, raw_diff, title, parsed_diff, session_seed) = match input {
+        let diff = match parsed_diff {
+            Some(diff) => diff,
+            None => SideBySideDiff::parse(&raw_diff)?,
+        };
+
+        eprintln!("Starting web UI for diff review...");
+        eprintln!("  {title}");
+        eprintln!("  Port: {port}");
+        eprintln!("  Comments file: {path}", path = comments_path.display());
+
+        let should_open = !self.no_open;
+
+        tokio::runtime::Runtime::new()
+            .context("Failed to create tokio runtime")?
+            .block_on(async {
+                let server = local::bind_server(
+                    refspec,
+                    port,
+                    comments_path,
+                    diff,
+                    raw_diff,
+                    session_seed,
+                    &bind,
+                )
+                .await?;
+
+                if should_open {
+                    open_url(server.url());
+                }
+
+                server.serve().await
+            })
+    }
+
+    pub fn check_requirements(&self) -> Result<()> {
+        self.validate_arguments()?;
+        check_executable("git")
+    }
+
+    fn validate_arguments(&self) -> Result<()> {
+        if self.from.is_some()
+            && (!self.refs.is_empty() || self.diff.is_some() || self.commit.is_some())
+        {
+            bail!(
+                "--from cannot be combined with positional refs, --diff, or --commit; the source session supplies the diff"
+            );
+        }
+
+        if self.diff.is_some() && self.commit.is_some() {
+            bail!("--diff and --commit cannot be used together");
+        }
+        if self.diff.is_some() && !self.refs.is_empty() {
+            bail!("--diff cannot be combined with positional refs");
+        }
+        if self.commit.is_some() && !self.refs.is_empty() {
+            bail!("--commit cannot be combined with positional refs");
+        }
+        if self.refs.len() > 2 {
+            bail!(
+                "Expected at most a base ref and an end ref, got {len} refs",
+                len = self.refs.len()
+            );
+        }
+
+        Ok(())
+    }
+
+    fn review_input(&self) -> Result<ReviewInput> {
+        if let Some(source_path) = self.from.as_ref() {
+            return Ok(ReviewInput::FromSession(source_path.clone()));
+        }
+        if let Some(path) = self.diff.as_ref() {
+            return Ok(ReviewInput::DiffFile(path.clone()));
+        }
+        if let Some(commit) = self.commit.as_ref() {
+            return Ok(ReviewInput::Commit(commit.clone()));
+        }
+
+        match self.refs.as_slice() {
+            [] => Ok(ReviewInput::Refs {
+                base: detect_base_branch()?,
+                end: String::from("HEAD"),
+            }),
+            [base] => Ok(ReviewInput::Refs {
+                base: base.clone(),
+                end: String::from("HEAD"),
+            }),
+            [base, end] => Ok(ReviewInput::Refs {
+                base: base.clone(),
+                end: end.clone(),
+            }),
+            _ => unreachable!("review arguments were validated before resolving the input"),
+        }
+    }
+
+    fn prepare_review(&self, input: ReviewInput) -> Result<PreparedReview> {
+        match input {
             ReviewInput::FromSession(source_path) => {
                 let source = CommentsFile::from_path(&source_path).with_context(|| {
                     format!(
@@ -67,14 +172,14 @@ impl ReviewLocalCommand {
                         path = source_path.display()
                     )
                 })?;
-                let raw_diff = raw_diff_from_session(&source)?;
+                let raw_diff = raw_diff_from_session_in(Path::new("."), &source)?;
                 let source_bytes = fs::read(&source_path).with_context(|| {
                     format!(
                         "Failed to read source review session '{path}'",
                         path = source_path.display()
                     )
                 })?;
-                let source_id = git_blob_id(source_bytes.as_slice())?;
+                let source_id = git_blob_id_in(Path::new("."), source_bytes.as_slice())?;
                 let refspec = RefSpec {
                     start_ref: source.start_ref.clone(),
                     end_ref: source.end_ref.clone(),
@@ -115,7 +220,14 @@ impl ReviewLocalCommand {
                     start_ref = refspec.start_ref,
                     end_ref = refspec.end_ref
                 );
-                (refspec, comments_path, raw_diff, title, None, session_seed)
+                Ok(PreparedReview {
+                    refspec,
+                    comments_path,
+                    raw_diff,
+                    title,
+                    parsed_diff: None,
+                    session_seed,
+                })
             }
             ReviewInput::Refs { base, end } => {
                 let refspec = RefSpec::parse(&base, &end)?.resolve()?;
@@ -133,12 +245,19 @@ impl ReviewLocalCommand {
                 };
                 let raw_diff = validate_and_prepare_session(&comments_path, &refspec)?;
                 let title = format!("Range: {base}..{end}");
-                (refspec, comments_path, raw_diff, title, None, None)
+                Ok(PreparedReview {
+                    refspec,
+                    comments_path,
+                    raw_diff,
+                    title,
+                    parsed_diff: None,
+                    session_seed: None,
+                })
             }
             ReviewInput::DiffFile(path) => {
                 let raw_diff = read_diff_file(&path)?;
                 let diff = parse_diff_file(&path, &raw_diff)?;
-                let blob_id = git_blob_id(raw_diff.as_bytes())?;
+                let blob_id = git_blob_id_in(Path::new("."), raw_diff.as_bytes())?;
                 let source_path = path.display().to_string();
                 let refspec = RefSpec {
                     start_ref: source_path.clone(),
@@ -153,97 +272,32 @@ impl ReviewLocalCommand {
                 let raw_diff =
                     validate_and_prepare_diff_session(&comments_path, &refspec, raw_diff)?;
                 let title = format!("Diff file: {source_path}");
-                (refspec, comments_path, raw_diff, title, Some(diff), None)
+                Ok(PreparedReview {
+                    refspec,
+                    comments_path,
+                    raw_diff,
+                    title,
+                    parsed_diff: Some(diff),
+                    session_seed: None,
+                })
             }
             ReviewInput::Commit(commit) => {
-                let refspec = review_commit_spec(&commit)?;
+                let refspec = review_commit_spec_in(Path::new("."), &commit)?;
                 let comments_path = match self.output.as_ref() {
                     Some(path) => path.clone(),
                     None => default_comments_path_in(Path::new(".review-comments"), &refspec)?,
                 };
                 let raw_diff = validate_and_prepare_session(&comments_path, &refspec)?;
                 let title = format!("Commit: {commit} (against first parent)");
-                (refspec, comments_path, raw_diff, title, None, None)
-            }
-        };
-
-        let diff = match parsed_diff {
-            Some(diff) => diff,
-            None => SideBySideDiff::parse(&raw_diff)?,
-        };
-
-        eprintln!("Starting web UI for diff review...");
-        eprintln!("  {title}");
-        eprintln!("  Port: {port}");
-        eprintln!("  Comments file: {path}", path = comments_path.display());
-
-        let should_open = !self.no_open;
-
-        tokio::runtime::Runtime::new()
-            .context("Failed to create tokio runtime")?
-            .block_on(async {
-                let server = local::bind_server_with_session_seed(
+                Ok(PreparedReview {
                     refspec,
-                    port,
                     comments_path,
-                    diff,
                     raw_diff,
-                    session_seed,
-                    &bind,
-                )
-                .await?;
-
-                if should_open {
-                    open_url(server.url());
-                }
-
-                server.serve().await
-            })
-    }
-
-    pub fn check_requirements(&self) -> Result<()> {
-        check_executable("git")
-    }
-
-    fn review_input(&self) -> Result<ReviewInput> {
-        if let Some(source_path) = self.from.as_ref() {
-            if !self.refs.is_empty() || self.diff.is_some() || self.commit.is_some() {
-                bail!(
-                    "--from cannot be combined with positional refs, --diff, or --commit; the source session supplies the diff"
-                );
+                    title,
+                    parsed_diff: None,
+                    session_seed: None,
+                })
             }
-
-            return Ok(ReviewInput::FromSession(source_path.clone()));
-        }
-
-        match (
-            self.diff.as_ref(),
-            self.commit.as_deref(),
-            self.refs.is_empty(),
-        ) {
-            (Some(_), Some(_), _) => bail!("--diff and --commit cannot be used together"),
-            (Some(_), None, false) => bail!("--diff cannot be combined with positional refs"),
-            (None, Some(_), false) => bail!("--commit cannot be combined with positional refs"),
-            (Some(path), None, true) => Ok(ReviewInput::DiffFile(path.clone())),
-            (None, Some(commit), true) => Ok(ReviewInput::Commit(commit.to_string())),
-            (None, None, _) => match self.refs.as_slice() {
-                [] => Ok(ReviewInput::Refs {
-                    base: detect_base_branch()?,
-                    end: String::from("HEAD"),
-                }),
-                [base] => Ok(ReviewInput::Refs {
-                    base: base.clone(),
-                    end: String::from("HEAD"),
-                }),
-                [base, end] => Ok(ReviewInput::Refs {
-                    base: base.clone(),
-                    end: end.clone(),
-                }),
-                args => bail!(
-                    "Expected at most a base ref and an end ref, got {len} refs",
-                    len = args.len()
-                ),
-            },
         }
     }
 
@@ -276,6 +330,15 @@ enum ReviewInput {
     Refs { base: String, end: String },
     DiffFile(PathBuf),
     Commit(String),
+}
+
+struct PreparedReview {
+    refspec: RefSpec,
+    comments_path: PathBuf,
+    raw_diff: String,
+    title: String,
+    parsed_diff: Option<SideBySideDiff<'static>>,
+    session_seed: Option<SessionSeed>,
 }
 
 fn default_comments_path_in(directory: &Path, refspec: &RefSpec) -> Result<PathBuf> {
@@ -337,11 +400,6 @@ fn working_tree_warning(
     )))
 }
 
-/// Generate a raw diff from git using the refspec
-fn generate_raw_diff(refspec: &RefSpec) -> Result<String> {
-    generate_raw_diff_in(Path::new("."), refspec)
-}
-
 fn generate_raw_diff_in(directory: &Path, refspec: &RefSpec) -> Result<String> {
     let diff_args = refspec.diff_args();
     generate_raw_diff_with_args_in(directory, &diff_args)
@@ -385,10 +443,6 @@ fn validate_stored_sha(sha: &str, label: &str) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn raw_diff_from_session(source: &CommentsFile) -> Result<String> {
-    raw_diff_from_session_in(Path::new("."), source)
 }
 
 fn raw_diff_from_session_in(directory: &Path, source: &CommentsFile) -> Result<String> {
@@ -449,10 +503,6 @@ fn parse_diff_file(path: &Path, raw_diff: &str) -> Result<SideBySideDiff<'static
     })
 }
 
-fn git_blob_id(content: &[u8]) -> Result<String> {
-    git_blob_id_in(Path::new("."), content)
-}
-
 fn git_blob_id_in(directory: &Path, content: &[u8]) -> Result<String> {
     let mut child = Command::new("git")
         .args(["hash-object", "--stdin"])
@@ -481,10 +531,6 @@ fn git_blob_id_in(directory: &Path, content: &[u8]) -> Result<String> {
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-fn review_commit_spec(commit_ref: &str) -> Result<RefSpec> {
-    review_commit_spec_in(Path::new("."), commit_ref)
 }
 
 fn review_commit_spec_in(directory: &Path, commit_ref: &str) -> Result<RefSpec> {
@@ -568,7 +614,7 @@ fn run_git_in(directory: &Path, args: &[&str], action: &str) -> Result<String> {
 fn validate_and_prepare_session(comments_path: &Path, refspec: &RefSpec) -> Result<String> {
     if !comments_path.exists() {
         eprintln!("Generating diff snapshot...");
-        return generate_raw_diff(refspec);
+        return generate_raw_diff_in(Path::new("."), refspec);
     }
 
     let file = CommentsFile::from_path(comments_path)?;
@@ -584,7 +630,7 @@ fn validate_and_prepare_session(comments_path: &Path, refspec: &RefSpec) -> Resu
         }
         // Edge case: file exists but no diff stored
         eprintln!("Generating diff snapshot (upgrading file format)...");
-        return generate_raw_diff(refspec);
+        return generate_raw_diff_in(Path::new("."), refspec);
     }
 
     bail!(
@@ -1001,7 +1047,7 @@ mod tests {
     }
 
     #[test]
-    fn review_input_rejects_mode_and_ref_combinations() {
+    fn validate_arguments_rejects_mode_and_ref_combinations() {
         let diff_and_commit = ReviewLocalCommand {
             diff: Some(PathBuf::from("change.diff")),
             commit: Some("HEAD".to_string()),
@@ -1009,7 +1055,7 @@ mod tests {
         };
         assert!(
             diff_and_commit
-                .review_input()
+                .validate_arguments()
                 .unwrap_err()
                 .to_string()
                 .contains("--diff and --commit")
@@ -1022,7 +1068,7 @@ mod tests {
         };
         assert!(
             diff_and_refs
-                .review_input()
+                .validate_arguments()
                 .unwrap_err()
                 .to_string()
                 .contains("--diff cannot be combined with positional refs")
@@ -1035,7 +1081,7 @@ mod tests {
         };
         assert!(
             commit_and_refs
-                .review_input()
+                .validate_arguments()
                 .unwrap_err()
                 .to_string()
                 .contains("--commit cannot be combined with positional refs")
@@ -1048,7 +1094,7 @@ mod tests {
         };
         assert!(
             source_and_refs
-                .review_input()
+                .validate_arguments()
                 .unwrap_err()
                 .to_string()
                 .contains("--from cannot be combined")

@@ -91,27 +91,6 @@ pub async fn bind_server(
     comments_file: PathBuf,
     diff: SideBySideDiff<'static>,
     raw_diff: String,
-    bind_address: &str,
-) -> Result<BoundServer> {
-    bind_server_with_session_seed(
-        refspec,
-        port,
-        comments_file,
-        diff,
-        raw_diff,
-        None,
-        bind_address,
-    )
-    .await
-}
-
-/// Bind the server and optionally seed a new session from another review.
-pub async fn bind_server_with_session_seed(
-    refspec: RefSpec,
-    port: u16,
-    comments_file: PathBuf,
-    diff: SideBySideDiff<'static>,
-    raw_diff: String,
     session_seed: Option<SessionSeed>,
     bind_address: &str,
 ) -> Result<BoundServer> {

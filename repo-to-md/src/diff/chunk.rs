@@ -36,10 +36,6 @@ impl<'a> MultilineParser<'a> for ChunkParser {
 
     type Output = Chunk<'a>;
 
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        self.parse_lines_at(lines, 1)
-    }
-
     fn parse_lines_at(
         &self,
         lines: &'a [&'a str],

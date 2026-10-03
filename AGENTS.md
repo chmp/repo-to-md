@@ -525,6 +525,10 @@ pub fn fetch_review_comments(...) { ... }
 fn run_graphql_query(...) { ... }
 ```
 
+Avoid single-line wrapper functions that only forward arguments to another
+function. Call the underlying function directly when the wrapper adds no
+meaningful behavior or semantic boundary.
+
 ### Function ordering in main.rs
 
 1. Imports

@@ -45,10 +45,6 @@ impl<'a> MultilineParser<'a> for DiffHeaderBlockParser {
 
     type Output = DiffHeaderBlock<'a>;
 
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        self.parse_lines_at(lines, 1)
-    }
-
     fn parse_lines_at(
         &self,
         lines: &'a [&'a str],
@@ -121,7 +117,9 @@ fn parse_diff_header_block() {
         "+++ b/src/lib.rs",
         "@@ -1,3 +1,3 @@",
     ];
-    let (header, rest) = DiffHeaderBlockParser.parse_lines_required(&lines).unwrap();
+    let (header, rest) = DiffHeaderBlockParser
+        .parse_lines_required_at(&lines, 1)
+        .unwrap();
     assert_eq!(
         header,
         DiffHeaderBlock {
@@ -151,7 +149,11 @@ fn parse_diff_header_block() {
         "+++ b/merged.rs",
         "@@@ -1,2 -1,2 +1,2 @@@",
     ];
-    let header = DiffHeaderBlockParser.parse_lines_expected(&merge_lines);
+    let header = DiffHeaderBlockParser
+        .parse_lines_at(&merge_lines, 1)
+        .unwrap()
+        .unwrap()
+        .0;
     assert_eq!(
         header.old_files,
         vec![
