@@ -42,6 +42,13 @@ impl CommentsFile {
     }
 }
 
+/// Comments and viewed-file progress copied from an earlier review session.
+#[derive(Debug, Clone)]
+pub struct SessionSeed {
+    pub comments: Vec<Comment>,
+    pub viewed_files: Vec<String>,
+}
+
 /// Application state shared across all handlers
 pub struct AppState {
     pub refspec: RefSpec,
@@ -62,9 +69,34 @@ impl AppState {
         diff: SideBySideDiff<'static>,
         raw_diff: String,
     ) -> Result<Arc<Self>> {
-        let (comments, viewed_files, mtime) = Self::load_comments(&comments_file_path)?;
+        Self::new_with_session_seed(refspec, comments_file_path, diff, raw_diff, None)
+    }
 
-        Ok(Arc::new(AppState {
+    pub fn new_with_session_seed(
+        refspec: RefSpec,
+        comments_file_path: PathBuf,
+        diff: SideBySideDiff<'static>,
+        raw_diff: String,
+        session_seed: Option<SessionSeed>,
+    ) -> Result<Arc<Self>> {
+        let is_new_session = !comments_file_path.exists();
+        if session_seed.is_some() && !is_new_session {
+            anyhow::bail!(
+                "Cannot continue from a previous review because session '{path}' already exists",
+                path = comments_file_path.display()
+            );
+        }
+
+        let (comments, viewed_files, mtime) = if is_new_session {
+            match session_seed {
+                Some(seed) => (seed.comments, seed.viewed_files, None),
+                None => (Vec::new(), Vec::new(), None),
+            }
+        } else {
+            Self::load_comments(&comments_file_path)?
+        };
+
+        let state = Arc::new(AppState {
             refspec,
             comments_file_path,
             comments: RwLock::new(comments),
@@ -72,7 +104,13 @@ impl AppState {
             diff,
             raw_diff,
             file_mtime: RwLock::new(mtime),
-        }))
+        });
+
+        if is_new_session {
+            state.save_comments()?;
+        }
+
+        Ok(state)
     }
 
     fn load_comments(path: &PathBuf) -> Result<(Vec<Comment>, Vec<String>, Option<SystemTime>)> {
@@ -240,7 +278,10 @@ impl AppState {
 
 fn atomic_write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     // Write to temp file in same directory (for atomic rename)
-    let parent = path.parent().unwrap_or(Path::new("."));
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     let temp_file = NamedTempFile::new_in(parent).context("Failed to create temp file for save")?;
 
     // Serialize directly to file
@@ -253,4 +294,82 @@ fn atomic_write_json(path: &Path, value: &impl Serialize) -> Result<()> {
         .context("Failed to save comments file")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use super::*;
+    use crate::client::User;
+
+    #[test]
+    fn new_state_persists_initial_session() {
+        let directory = tempdir().unwrap();
+        let comments_file_path = directory.path().join("session.json");
+        let refspec = RefSpec {
+            start_ref: "base".to_string(),
+            end_ref: "end".to_string(),
+            start_sha: "base-sha".to_string(),
+            end_sha: "end-sha".to_string(),
+        };
+
+        AppState::new(
+            refspec,
+            comments_file_path.clone(),
+            SideBySideDiff::parse("").unwrap(),
+            "raw diff snapshot".to_string(),
+        )
+        .unwrap();
+
+        let saved = CommentsFile::from_path(&comments_file_path).unwrap();
+        assert_eq!(saved.start_sha, "base-sha");
+        assert_eq!(saved.end_sha, "end-sha");
+        assert_eq!(saved.raw_diff, "raw diff snapshot");
+        assert!(saved.comments.is_empty());
+    }
+
+    #[test]
+    fn new_state_can_continue_from_another_review_session() {
+        let directory = tempdir().unwrap();
+        let comments_file_path = directory.path().join("new-session.json");
+        let refspec = RefSpec {
+            start_ref: "new-base".to_string(),
+            end_ref: "new-end".to_string(),
+            start_sha: "new-base-sha".to_string(),
+            end_sha: "new-end-sha".to_string(),
+        };
+        let initial_comments = vec![Comment {
+            id: "previous-comment".to_string(),
+            path: "src/lib.rs".to_string(),
+            line: Some(12),
+            body: "Carry this comment forward".to_string(),
+            diff_hunk: "@@ -10,1 +10,1 @@".to_string(),
+            user: User {
+                login: "reviewer".to_string(),
+            },
+            is_minimized: false,
+        }];
+
+        AppState::new_with_session_seed(
+            refspec,
+            comments_file_path.clone(),
+            SideBySideDiff::parse("").unwrap(),
+            "new diff snapshot".to_string(),
+            Some(SessionSeed {
+                comments: initial_comments,
+                viewed_files: vec!["src/lib.rs".to_string()],
+            }),
+        )
+        .unwrap();
+
+        let saved = CommentsFile::from_path(&comments_file_path).unwrap();
+        assert_eq!(saved.comments.len(), 1);
+        assert_eq!(saved.comments[0].id, "previous-comment");
+        assert_eq!(saved.comments[0].body, "Carry this comment forward");
+        assert_eq!(saved.viewed_files, vec!["src/lib.rs"]);
+        assert_eq!(saved.start_sha, "new-base-sha");
+        assert_eq!(saved.end_sha, "new-end-sha");
+        assert_eq!(saved.raw_diff, "new diff snapshot");
+    }
 }

@@ -16,7 +16,7 @@ use super::handlers::{
     update_comment,
 };
 use super::refspec::RefSpec;
-use super::state::AppState;
+use super::state::{AppState, SessionSeed};
 use crate::side_by_side_diff::SideBySideDiff;
 
 /// Shared state for shutdown signaling
@@ -91,9 +91,16 @@ pub async fn bind_server(
     comments_file: PathBuf,
     diff: SideBySideDiff<'static>,
     raw_diff: String,
+    session_seed: Option<SessionSeed>,
     bind_address: &str,
 ) -> Result<BoundServer> {
-    let app_state = AppState::new(refspec, comments_file.clone(), diff, raw_diff)?;
+    let app_state = AppState::new_with_session_seed(
+        refspec,
+        comments_file.clone(),
+        diff,
+        raw_diff,
+        session_seed,
+    )?;
 
     // Create shutdown signal channel
     let (shutdown_tx, _) = broadcast::channel::<()>(1);

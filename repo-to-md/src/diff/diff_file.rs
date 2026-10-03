@@ -1,8 +1,9 @@
 use anyhow::Result;
 
 use super::chunk::{Chunk, ChunkParser};
-use super::diff_file_header::{DiffFileHeader, DiffFileHeaderParser};
-use super::parser::MultilineParser;
+use super::diff_file_header::{DiffFileHeader, DiffFileHeaderParser, is_binary_diff_marker};
+use super::diff_header::DiffHeaderParser;
+use super::parser::{LineParser, MultilineParser};
 
 /// The parsed diff for a single file.
 ///
@@ -30,16 +31,37 @@ impl<'a> MultilineParser<'a> for DiffFileParser {
 
     type Output = DiffFile<'a>;
 
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
-        let Some((header, rest)) = DiffFileHeaderParser.parse_lines(lines)? else {
+    fn parse_lines_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<Option<(Self::Output, &'a [&'a str])>> {
+        let Some((header, rest)) = DiffFileHeaderParser.parse_lines_at(lines, first_line_number)?
+        else {
             return Ok(None);
         };
-        let (chunks, rest) = ChunkParser.parse_lines_many(rest)?;
+        let chunks_first_line = first_line_number + lines.len() - rest.len();
+        let is_binary = rest.first().is_some_and(|line| is_binary_diff_marker(line));
+        let (chunks, rest) = if is_binary {
+            (Vec::new(), skip_binary_diff(rest))
+        } else {
+            ChunkParser.parse_lines_many_at(rest, chunks_first_line)?
+        };
 
         let result = DiffFile { header, chunks };
 
         Ok(Some((result, rest)))
     }
+}
+
+fn skip_binary_diff<'a>(mut lines: &'a [&'a str]) -> &'a [&'a str] {
+    while let Some((line, rest)) = lines.split_first() {
+        if matches!(DiffHeaderParser.parse_line(line), Ok(Some(_))) {
+            return lines;
+        }
+        lines = rest;
+    }
+    lines
 }
 
 #[test]
@@ -53,7 +75,7 @@ fn diff_file_into_static() {
         " line",
         "next file",
     ];
-    let (file, rest) = DiffFileParser.parse_lines_required(&lines).unwrap();
+    let (file, rest) = DiffFileParser.parse_lines_required_at(&lines, 1).unwrap();
     assert_eq!(rest, &["next file"]);
 
     let _static_file: DiffFile<'static> = file.into_static();

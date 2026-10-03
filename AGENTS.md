@@ -83,6 +83,13 @@ The frontend test runner serves `repo-to-md/src/static/test.html` locally and
 executes it in headless Chromium via Python Playwright. The flake provides the
 Nix-packaged Playwright browser bundle required on NixOS.
 
+### Commits
+
+Create a Git commit for completed changes unless the user explicitly asks you
+not to. Before committing, run the required format, lint, and test checks,
+review the diff, and stage only files related to the change. Use a concise,
+imperative commit subject.
+
 ### Build
 
 ```bash
@@ -122,6 +129,7 @@ cargo run -- review format --author <USERNAME>
 cargo run -- review format <PR_NUMBER> --author <USERNAME> --review -1
 cargo run -- review format --author @me
 cargo run -- review format <PR_NUMBER> --author @me --review -1
+cargo run -- review format --local
 ```
 
 Fetch issues:
@@ -143,23 +151,50 @@ cargo run -- review local main               # Review commits from main to HEAD
 cargo run -- review local main feature       # Review commits from main to feature
 cargo run -- review local HEAD~5 HEAD~2      # Review specific commit range
 cargo run -- review local main --no-open     # Don't open browser automatically
-cargo run -- review local --force            # Force regeneration even with uncommitted changes
+cargo run -- review local --diff change.patch # Review a saved unified diff
+cargo run -- review local --commit HEAD~2    # Review one commit against its first parent
+cargo run -- review local --from .review-comments/old-session.json
 ```
 
 The `review local` command launches a local web server with a side-by-side diff
-viewer for reviewing a range of commits before merge. It takes a base ref (first
-argument) and an optional end ref (second argument, defaults to HEAD). When no
-arguments are provided, it auto-detects the base branch (trying origin/HEAD,
-main, then master).
+viewer. In positional-ref mode, it reviews a range of commits before merge. It
+takes a base ref (first argument) and an optional end ref (second argument,
+defaults to HEAD). When no positional refs or mode options are provided, it
+auto-detects the base branch (trying origin/HEAD, main, then master).
 
-The command refuses to start if:
-- There are uncommitted changes and reviewing HEAD (use `--force` to override)
-- The session file exists but has changed commits/refs (use `--force` to regenerate)
-- No commits exist in the range
+When the end ref defaults to `HEAD`, uncommitted changes produce a warning and
+the review continues; the review includes committed changes only. The command
+refuses to start if an explicit `-o` session file exists for different commits
+or refs, protecting its comments. Choose a different output path or remove the
+existing session file to start fresh. It also refuses to start if no commits
+exist in the range.
 
-Comments are saved to `review-comments.json` by default (use `-o` to change).
-Browser opens automatically by default (use `--no-open` to disable). The session
-file tracks commits so reopening detects if the branch has changed.
+`--diff <path>` reviews an existing unified diff file and displays its source
+path in the UI. The default session is `.review-comments/diff-<blob-id>.json`,
+keyed by the exact diff contents, so identical content resumes the same session
+even when read from a different path. `-o` can select a custom session path;
+the command protects an existing session if the diff contents change.
+
+`--commit <ref>` resolves one commit and reviews it against its first parent.
+Root commits use the empty tree as the base; merge commits use their first
+parent. The default session is keyed by the resolved base and commit SHAs.
+`--diff` and `--commit` are mutually exclusive and cannot be combined with
+positional refs. The server options (`--bind`, `--port`, and `--no-open`) remain
+available in either mode.
+
+`--from <path>` continues from an earlier local review JSON file. It uses the
+saved diff snapshot when present, otherwise regenerates the diff from the
+stored commit SHAs if Git still has those objects, and carries forward comments
+and viewed-file progress.
+`--from` supplies the diff and cannot be combined with positional refs, `--diff`,
+or `--commit`. A separate session is created by default; use `-o` to choose its
+path. Repeating the command resumes the generated continuation session.
+
+Range sessions are saved under `.review-comments/`, keyed by the resolved base
+and end commit SHAs. Reopening the same range resumes its session, while a
+changed range gets a separate session file. The directory's `.gitignore`
+excludes the generated JSON files. Use `-o` to override the session path.
+Browser opens automatically by default (use `--no-open` to disable).
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
@@ -171,15 +206,23 @@ The server can be stopped by:
 
 On shutdown, the server prints the `review format` command to run next.
 
-Format comments as markdown:
+Format the most recently modified local session as markdown:
 
 ```bash
-cargo run -- review format review-comments.json     # Format specific file to stdout
+cargo run -- review format --local
+```
+
+Format an explicit comments file as markdown:
+
+```bash
+cargo run -- review format .review-comments/<base-sha>-<end-sha>.json
+cargo run -- review format path/to/comments.json
 ```
 
 When the positional argument names an existing path, `review format` treats it as
-a local comments file. Otherwise it is treated as a GitHub review ID or review
-index.
+a local comments file unless `--remote` is set. Otherwise it is treated as a PR
+number. Use `--review` to choose a specific review by ID or index. With no
+arguments, `review format` keeps its remote review behavior.
 
 ### Install skill
 
@@ -304,6 +347,10 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
 - **comment-form.js** - New comment input form
 - **review-comment.js** - Comment display with edit/delete actions
 
+**UI feedback:** Show transient toasts for errors only. Successful actions,
+including marking a file viewed and comment changes, should be reflected in the
+updated UI without a success toast.
+
 ### Key components
 
 **Data flow:**
@@ -313,12 +360,14 @@ examples/               - Test fixtures with JSON inputs and expected markdown o
    - Display review table with author, date, comment count, and description
    - User selects review by number
    - Fetch comments from selected review via GraphQL (`fetch_review_comments`)
-2. **Direct mode** (review ID positional provided):
-   - Fetch comments from specified review via GraphQL
-3. **File mode** (`--json-file` provided):
-   - Read comments from local JSON file
-4. Group comments by file path
-5. Format as markdown code blocks with inline comments
+2. **Direct mode** (`--review <REVIEW_ID>` provided):
+   - Fetch comments from the specified review via GraphQL
+3. **Index mode** (`--review <INDEX>` provided):
+   - List reviews and fetch comments from the selected review
+4. **File mode** (an existing comments file is passed positionally):
+   - Read comments from the local JSON file
+5. Group comments by file path
+6. Format as markdown code blocks with inline comments
 
 **GitHub GraphQL API (client/):**
 
@@ -475,6 +524,10 @@ pub fn fetch_review_comments(...) { ... }
 // 4. General support functions
 fn run_graphql_query(...) { ... }
 ```
+
+Avoid single-line wrapper functions that only forward arguments to another
+function. Call the underlying function directly when the wrapper adds no
+meaningful behavior or semantic boundary.
 
 ### Function ordering in main.rs
 

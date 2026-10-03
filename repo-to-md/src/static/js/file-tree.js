@@ -3,7 +3,7 @@
  * Displays the list of changed files with status icons and comment counts
  */
 
-import { escapeHtml, getFileName } from './utils.js';
+import { escapeAttr, escapeHtml, getFileName } from './utils.js';
 
 const FILE_ICONS = {
     added: `<svg class="file-tree-icon added" viewBox="0 0 16 16" fill="currentColor">
@@ -100,21 +100,25 @@ class FileTree extends HTMLElement {
                             <span class="file-tree-badge">${this.generalCommentCount}</span>
                         ` : ''}
                     </li>
-                ${this.items.map(item => `
+                ${this.items.map(item => {
+                    const parentPath = item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : '';
+                    return `
                     <li class="file-tree-item ${this.selectedFile === item.path ? 'active' : ''} ${item.isViewed ? 'viewed' : ''}"
-                        data-path="${escapeHtml(item.path)}">
-                        <button class="viewed-toggle" data-path="${escapeHtml(item.path)}" title="${item.isViewed ? 'Mark as unviewed' : 'Mark as viewed'}">
+                        data-path="${escapeAttr(item.path)}">
+                        <button class="viewed-toggle" data-path="${escapeAttr(item.path)}" title="${item.isViewed ? 'Mark as unviewed' : 'Mark as viewed'}">
                             ${item.isViewed ? VIEWED_ICON : UNVIEWED_ICON}
                         </button>
                         ${FILE_ICONS[item.status] || FILE_ICONS.modified}
-                        <span class="file-tree-name" title="${escapeHtml(item.path)}">
-                            ${escapeHtml(getFileName(item.path))}
+                        <span class="file-tree-name" title="${escapeAttr(item.path)}">
+                            <span class="file-tree-basename">${escapeHtml(getFileName(item.path))}</span>
+                            ${parentPath ? `<span class="file-tree-parent">${escapeHtml(parentPath)}</span>` : ''}
                         </span>
                         ${item.commentCount > 0 ? `
                             <span class="file-tree-badge">${item.commentCount}</span>
                         ` : ''}
                     </li>
-                `).join('')}
+                `;
+                }).join('')}
             </ul>
         `;
 
@@ -135,7 +139,7 @@ class FileTree extends HTMLElement {
                 const item = this.items.find(i => i.path === path);
                 const isCurrentlyViewed = item ? item.isViewed : false;
                 this.dispatchEvent(new CustomEvent('viewed-toggle', {
-                    detail: { path, viewed: !isCurrentlyViewed },
+                    detail: { path, viewed: !isCurrentlyViewed, button: btn },
                     bubbles: true,
                 }));
             });

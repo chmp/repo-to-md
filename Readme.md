@@ -94,7 +94,7 @@ repo-to-md review format <PR_NUMBER> --review <ID>     # Review by ID
 repo-to-md review format                               # Last review on current branch's PR
 repo-to-md review format --author @me                  # Filter by author
 repo-to-md review format --repo owner/repo             # Override repository
-repo-to-md review format --remote review-comments.json # Force remote lookup
+repo-to-md review format --local                      # Most recently modified local session
 ```
 
 For all available options, run `repo-to-md review format --help`.
@@ -125,14 +125,45 @@ Review local commits in a web UI before merging to the base branch:
 repo-to-md review local                    # Auto-detect base, review commits up to HEAD
 repo-to-md review local main               # Review commits from main to HEAD
 repo-to-md review local main feature       # Review commits from main to feature
+repo-to-md review local --diff saved.patch  # Review a saved unified diff
+repo-to-md review local --commit HEAD~2     # Review one commit against its first parent
+repo-to-md review local --from .review-comments/old-session.json
 ```
 
 This launches a local web server with a side-by-side diff viewer where you can
-add comments to the changes. The command reviews a range of commits (base..end)
-and refuses to start if there are uncommitted changes when reviewing HEAD (use
-`--force` to override). Comments are persisted to `review-comments.json` (use
-`-o` to change). The diff and commit list are also persisted, so reopening the
-session detects if commits have changed.
+add comments to the changes. With positional refs, the command reviews a range
+of commits (base..end). If the end ref defaults to `HEAD` and there are
+uncommitted changes, it prints a warning and continues; working-tree changes
+are not included in the review. Range sessions are persisted under
+`.review-comments/`, with one JSON file per base and end commit SHA. Reopening
+the same commit range resumes its session; a different range gets a separate
+session. The directory contains a `.gitignore` so generated session files stay
+out of Git. Use `-o` to save to a specific JSON path instead. If that path
+already contains a session for a different range, the command reports an error
+to protect its comments. Choose a different output path or remove the existing
+session file to start fresh.
+
+Use `--diff <path>` to review a saved unified diff file. The source path appears
+in the UI. By default, its session is saved as
+`.review-comments/diff-<blob-id>.json`, keyed by the exact file contents, so the
+same diff resumes its comments even if it is opened through another path. Use
+`-o` to choose a session path; an existing session at that path is protected if
+the diff contents change.
+
+Use `--commit <ref>` to review one commit against its first parent. Root commits
+are compared with the empty tree, and merge commits are compared with their
+first parent. Its default session uses the same base and commit SHA naming as a
+commit range. `--diff` and `--commit` cannot be combined with each other or with
+positional refs. Server options such as `--bind`, `--port`, and `--no-open` work
+in either mode.
+
+Use `--from <path>` to continue from an earlier local review JSON file. It uses
+the saved diff snapshot when present, otherwise regenerates the diff from the
+stored commit SHAs if Git still has those objects, and carries forward comments
+and viewed-file progress.
+`--from` supplies the diff, so it cannot be combined with refs, `--diff`, or
+`--commit`. A separate session is created by default; use `-o` to choose its
+path. Repeating the command resumes the generated continuation session.
 
 The bind address and port default to `127.0.0.1` and `8080`. They can be set
 with `REPO_TO_MD_BIND` and `REPO_TO_MD_PORT`; explicit `--bind` and `--port`
@@ -140,15 +171,24 @@ arguments take precedence over the environment.
 
 For all available options, run `repo-to-md review local --help`.
 
-The comments from a local review session can be exported to markdown by running:
+The most recently modified local session can be exported to markdown by running:
 
 ```bash
-repo-to-md review format review-comments.json
+repo-to-md review format --local
 ```
 
-When the positional argument names an existing path, `review format` treats it as
-a local comments file. Otherwise it is treated as a GitHub review ID or review
-index. To customize the review comments or the output to a file use
+You can also pass a local comments file explicitly, including a path supplied
+with `review local -o`:
+
+```bash
+repo-to-md review format .review-comments/<base-sha>-<end-sha>.json
+repo-to-md review format path/to/comments.json
+```
+
+When the positional argument names an existing path, `review format` treats it
+as a local comments file unless `--remote` is set. Otherwise it is treated as a
+PR number. Use `--review` to choose a specific review by ID or index. With no
+arguments, `review format` keeps its remote review behavior.
 
 ## How it works
 

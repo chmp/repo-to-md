@@ -10,6 +10,10 @@ class ReviewComment extends HTMLElement {
         super();
         this.comment = null;
         this.isEditing = false;
+        this.isSaving = false;
+        this.draftBody = null;
+        this.saveMessage = '';
+        this.saveMessageType = '';
     }
 
     /**
@@ -18,7 +22,20 @@ class ReviewComment extends HTMLElement {
      */
     setComment(comment) {
         this.comment = comment;
+        this.isEditing = false;
+        this.isSaving = false;
+        this.draftBody = null;
+        this.saveMessage = '';
+        this.saveMessageType = '';
         this.render();
+    }
+
+    setSaveError(message) {
+        this.isSaving = false;
+        this.saveMessage = message;
+        this.saveMessageType = 'error';
+        this.render();
+        this.querySelector('textarea')?.focus();
     }
 
     render() {
@@ -78,11 +95,12 @@ class ReviewComment extends HTMLElement {
 
     renderEditMode() {
         this.innerHTML = `
-            <textarea class="comment-form-textarea">${escapeHtml(this.comment.body)}</textarea>
+            <textarea class="comment-form-textarea" ${this.isSaving ? 'disabled' : ''}>${escapeHtml(this.draftBody ?? this.comment.body)}</textarea>
             <div class="comment-form-actions">
-                <button class="button cancel-button">Cancel</button>
-                <button class="button button-primary save-button">Save</button>
+                <button class="button cancel-button" ${this.isSaving ? 'disabled' : ''}>Cancel</button>
+                <button class="button button-primary save-button" ${this.isSaving ? 'disabled' : ''}>${this.isSaving ? 'Saving...' : 'Save'}</button>
             </div>
+            <div class="comment-form-status ${this.saveMessageType}" role="${this.saveMessageType === 'error' ? 'alert' : 'status'}" aria-live="${this.saveMessageType === 'error' ? 'assertive' : 'polite'}">${escapeHtml(this.saveMessage)}</div>
         `;
 
         const textarea = this.querySelector('textarea');
@@ -92,20 +110,38 @@ class ReviewComment extends HTMLElement {
         setupAutoResizeTextarea(textarea);
 
         const cancelEdit = () => {
+            if (this.isSaving) return;
             this.isEditing = false;
+            this.draftBody = null;
+            this.saveMessage = '';
             this.render();
         };
 
         const saveEdit = () => {
+            if (this.isSaving) return;
             const newBody = textarea.value.trim();
-            if (newBody && newBody !== this.comment.body) {
-                this.dispatchEvent(new CustomEvent('comment-update', {
-                    detail: { id: this.comment.id, body: newBody },
-                    bubbles: true,
-                }));
+            if (!newBody) {
+                this.saveMessage = 'Comment text cannot be empty.';
+                this.saveMessageType = 'error';
+                this.render();
+                this.querySelector('textarea')?.focus();
+                return;
             }
-            this.isEditing = false;
+
+            if (newBody === this.comment.body) {
+                cancelEdit();
+                return;
+            }
+
+            this.draftBody = newBody;
+            this.isSaving = true;
+            this.saveMessage = 'Saving comment...';
+            this.saveMessageType = 'pending';
             this.render();
+            this.dispatchEvent(new CustomEvent('comment-update', {
+                detail: { id: this.comment.id, body: newBody },
+                bubbles: true,
+            }));
         };
 
         this.querySelector('.cancel-button').addEventListener('click', cancelEdit);

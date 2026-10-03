@@ -78,7 +78,7 @@ dev = [
     { name = "pdoc", specifier = "~=16.0.0" },
     { name = "pytest", specifier = "~=9.0.2" },
     { name = "ruff", specifier = "~=0.14.9" },
-    { name = "ty", specifier = "~=0.0.32" },
+    { name = "ty", specifier = "~=0.0.34" },
 ]
 
 [[package]]

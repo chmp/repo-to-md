@@ -25,7 +25,7 @@
 //! - The [`MultiLineParser`] blanket impl for [`LineParser`] tries to parse
 //!   the first line
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, anyhow, bail, ensure};
 
 /// Parses a prefix of a string.
 ///
@@ -93,33 +93,47 @@ pub trait MultilineParser<'a>: Sized {
 
     type Output;
 
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>>;
+    /// Parse lines while retaining their 1-based source line number.
+    fn parse_lines_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<Option<(Self::Output, &'a [&'a str])>>;
 
-    fn parse_lines_required(&self, lines: &'a [&'a str]) -> Result<(Self::Output, &'a [&'a str])> {
-        let Some((this, rest)) = self.parse_lines(lines)? else {
-            bail!("could not parse required {}", Self::NAME);
+    fn parse_lines_required_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<(Self::Output, &'a [&'a str])> {
+        let Some((this, rest)) = self.parse_lines_at(lines, first_line_number)? else {
+            bail!(
+                "line {first_line_number}: could not parse required {}",
+                Self::NAME
+            );
         };
         Ok((this, rest))
     }
 
-    fn parse_lines_many(&self, lines: &'a [&'a str]) -> Result<(Vec<Self::Output>, &'a [&'a str])> {
+    /// Parse as many items as possible, tracking the source line for errors.
+    fn parse_lines_many_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<(Vec<Self::Output>, &'a [&'a str])> {
         let mut result = Vec::new();
         let mut rest = lines;
+        let mut line_number = first_line_number;
 
         loop {
-            let Some((item, next_rest)) = self.parse_lines(rest)? else {
+            let Some((item, next_rest)) = self.parse_lines_at(rest, line_number)? else {
                 break;
             };
+            line_number += rest.len() - next_rest.len();
             result.push(item);
             rest = next_rest;
         }
 
         Ok((result, rest))
-    }
-
-    #[cfg(test)]
-    fn parse_lines_expected(&self, lines: &'a [&'a str]) -> Self::Output {
-        self.parse_lines(lines).unwrap().unwrap().0
     }
 }
 
@@ -128,11 +142,18 @@ impl<'a, P: LineParser<'a>> MultilineParser<'a> for P {
 
     type Output = P::Output;
 
-    fn parse_lines(&self, lines: &'a [&'a str]) -> Result<Option<(Self::Output, &'a [&'a str])>> {
+    fn parse_lines_at(
+        &self,
+        lines: &'a [&'a str],
+        first_line_number: usize,
+    ) -> Result<Option<(Self::Output, &'a [&'a str])>> {
         let Some((head, tail)) = lines.split_first() else {
             return Ok(None);
         };
-        let Some(item) = self.parse_line(head)? else {
+        let Some(item) = self
+            .parse_line(head)
+            .map_err(|error| anyhow!("line {first_line_number}: {error}"))?
+        else {
             return Ok(None);
         };
         Ok(Some((item, tail)))

@@ -30,7 +30,7 @@ pub(crate) fn parse_diff_hunk_with_line_numbers(
     line_range: Option<(u32, u32)>,
 ) -> (Vec<ParsedHunkLine>, bool, bool) {
     let lines = diff_hunk.lines().collect::<Vec<_>>();
-    let Ok((chunk, _)) = ChunkParser.parse_lines_required(&lines) else {
+    let Ok((chunk, _)) = ChunkParser.parse_lines_required_at(&lines, 1) else {
         return (Vec::new(), false, false);
     };
     let chunk = SideBySideChunk::from(chunk);

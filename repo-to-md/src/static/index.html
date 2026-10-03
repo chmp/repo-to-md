@@ -13,13 +13,16 @@
             <span class="ref-info" id="refInfo">Loading...</span>
         </div>
         <div class="header-right">
-            <button class="button button-small" id="prevCommentBtn" title="Previous comment">&#9650; Prev</button>
-            <button class="button button-small" id="nextCommentBtn" title="Next comment">Next &#9660;</button>
+            <button class="button button-small" id="prevCommentBtn" title="Previous comment" disabled>&#9650; Prev</button>
+            <button class="button button-small" id="nextCommentBtn" title="Next comment" disabled>Next &#9660;</button>
+            <span class="comment-nav-status" id="commentNavStatus" role="status" aria-live="polite">Loading comments...</span>
             <button class="button button-shutdown" id="shutdownBtn" title="Quit the review server">
                 Quit
             </button>
         </div>
     </header>
+
+    <div class="app-status" id="appStatus" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
     <main class="main-content">
         <file-tree class="sidebar"></file-tree>

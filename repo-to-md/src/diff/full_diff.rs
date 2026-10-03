@@ -1,5 +1,4 @@
-use anyhow::Result;
-use anyhow::bail;
+use anyhow::{Result, bail};
 
 use super::DiffFile;
 use super::DiffFileParser;
@@ -29,11 +28,12 @@ impl<'a> MultilineParser<'a> for DiffParser {
 
     type Output = Diff<'a>;
 
-    fn parse_lines(
+    fn parse_lines_at(
         &self,
         lines: &'a [&'a str],
+        first_line_number: usize,
     ) -> anyhow::Result<Option<(Self::Output, &'a [&'a str])>> {
-        let (files, rest) = DiffFileParser.parse_lines_many(lines)?;
+        let (files, rest) = DiffFileParser.parse_lines_many_at(lines, first_line_number)?;
 
         let result = Diff { files };
         Ok(Some((result, rest)))
@@ -41,10 +41,16 @@ impl<'a> MultilineParser<'a> for DiffParser {
 }
 
 pub fn parse<'a>(lines: &'a [&'a str]) -> Result<Diff<'a>> {
-    let (result, rest) = DiffParser.parse_lines_required(lines)?;
-    for line in rest {
+    let Some((result, rest)) = DiffParser.parse_lines_at(lines, 1)? else {
+        bail!("could not parse required diff at line 1");
+    };
+    let first_rest_line = 1 + lines.len() - rest.len();
+    for (offset, line) in rest.iter().enumerate() {
         if !line.trim().is_empty() {
-            bail!("trailing content in diff: {line:?}");
+            bail!(
+                "line {}: trailing content in diff: {line:?}",
+                first_rest_line + offset
+            );
         }
     }
     Ok(result)
@@ -97,4 +103,105 @@ fn parse_full_diff_rejects_trailing_content() {
         error.to_string().contains("trailing content in diff"),
         "{error}"
     );
+}
+
+#[test]
+fn parse_hunk_header_with_omitted_range_count() {
+    let lines = [
+        "diff --git a/new-file.txt b/new-file.txt",
+        "new file mode 100644",
+        "index 0000000..1111111",
+        "--- /dev/null",
+        "+++ b/new-file.txt",
+        "@@ -0,0 +1 @@",
+        "+new line",
+    ];
+
+    let diff = parse(&lines).unwrap();
+    assert_eq!(diff.files[0].chunks[0].from_ranges[0], 0..0);
+    assert_eq!(diff.files[0].chunks[0].to_range, 1..2);
+    assert_eq!(diff.files[0].chunks[0].lines.len(), 1);
+}
+
+#[test]
+fn parse_error_reports_the_source_line_number() {
+    let lines = [
+        "diff --git a/first.txt b/first.txt",
+        "index 0000000..1111111",
+        "--- a/first.txt",
+        "+++ b/first.txt",
+        "@@ -1 +1 @@",
+        "-old",
+        "+new",
+        "diff --git a/new-file.txt b/new-file.txt",
+        "new file mode 100644",
+        "index 0000000..1111111",
+        "--- /dev/null",
+        "+++ b/new-file.txt",
+        "@@ -0,0 +1, @@",
+    ];
+
+    let error = parse(&lines).unwrap_err();
+    assert!(error.to_string().contains("line 13:"), "{error}");
+    assert!(
+        error.to_string().contains("expected range length"),
+        "{error}"
+    );
+}
+
+#[test]
+fn parse_binary_file_without_file_headers_and_continue_to_next_file() {
+    let lines = [
+        "diff --git a/images/rwasm.jpg b/images/rwasm.jpg",
+        "new file mode 100644",
+        "index 0000000..9fb9beb",
+        "Binary files /dev/null and b/images/rwasm.jpg differ",
+        "diff --git a/src/main.rs b/src/main.rs",
+        "index 1111111..2222222 100644",
+        "--- a/src/main.rs",
+        "+++ b/src/main.rs",
+        "@@ -1,1 +1,1 @@",
+        "-old",
+        "+new",
+    ];
+
+    let diff = parse(&lines).unwrap();
+    assert_eq!(diff.files.len(), 2);
+
+    let binary = &diff.files[0];
+    assert_eq!(binary.header.header.left.as_str(), "images/rwasm.jpg");
+    assert_eq!(binary.header.old_files, vec![None]);
+    assert_eq!(
+        binary.header.new_file.as_ref().map(|path| path.as_str()),
+        Some("images/rwasm.jpg")
+    );
+    assert_eq!(binary.header.extended_header.len(), 2);
+    assert!(binary.chunks.is_empty());
+    assert_eq!(diff.files[1].header.header.left.as_str(), "src/main.rs");
+    assert_eq!(diff.files[1].chunks.len(), 1);
+}
+
+#[test]
+fn parse_git_binary_patch_and_continue_to_next_file() {
+    let lines = [
+        "diff --git a/images/logo.png b/images/logo.png",
+        "index 1111111..2222222 100644",
+        "GIT binary patch",
+        "literal 10",
+        "opaque binary payload",
+        "",
+        "diff --git a/README.md b/README.md",
+        "index 3333333..4444444 100644",
+        "--- a/README.md",
+        "+++ b/README.md",
+        "@@ -1,1 +1,1 @@",
+        "-old",
+        "+new",
+    ];
+
+    let diff = parse(&lines).unwrap();
+    assert_eq!(diff.files.len(), 2);
+    assert!(diff.files[0].chunks.is_empty());
+    assert_eq!(diff.files[1].header.header.left.as_str(), "README.md");
+    assert_eq!(diff.files[1].chunks.len(), 1);
 }

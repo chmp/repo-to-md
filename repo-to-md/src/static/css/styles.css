@@ -97,6 +97,17 @@ html {
     border-color: var(--text-secondary);
 }
 
+.button:disabled,
+.viewed-toggle:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.button:disabled:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+}
+
 .button-primary {
     background: var(--accent-green);
     border-color: var(--accent-green);
@@ -136,6 +147,36 @@ html {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+.comment-nav-status {
+    min-width: 94px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.app-status[hidden] {
+    display: none;
+}
+
+.app-status {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 200;
+    max-width: min(520px, calc(100vw - 32px));
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.app-status.error {
+    border-color: var(--accent-red);
 }
 
 .main-content {
@@ -225,11 +266,25 @@ html {
 
 .file-tree-name {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     font-size: 13px;
+    line-height: 1.35;
+    overflow: hidden;
+}
+
+.file-tree-basename,
+.file-tree-parent {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.file-tree-parent {
+    color: var(--text-muted);
+    font-size: 10px;
 }
 
 .file-tree-badge {
@@ -334,7 +389,8 @@ diff-view {
 
 .diff-line-inner {
     padding: 0 8px;
-    white-space: pre;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     overflow-x: hidden;
     display: block;
 }
@@ -500,6 +556,25 @@ comment-form {
     justify-content: flex-end;
     gap: 8px;
     margin-top: 8px;
+}
+
+.comment-form-status {
+    min-height: 0;
+    margin-top: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.comment-form-status:not(:empty) {
+    margin-top: 8px;
+}
+
+.comment-form-status.error {
+    color: var(--accent-red);
+}
+
+.comment-form-status.pending {
+    color: var(--text-secondary);
 }
 
 .empty-state {
