@@ -1,6 +1,6 @@
 # Changes
 
-## #!30
+## #30
 
 - Local review sessions are stored under `.review-comments/`, keyed by commit
   range or diff contents. Reopening a session resumes it.
